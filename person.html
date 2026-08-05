@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Моите задачи</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="card person" style="max-width:520px;margin:40px auto 0;">
+    <h2 id="nameHeader">Задачи</h2>
+    <p class="sub-note">Само за преглед — списъкът се обновява автоматично.</p>
+    <div id="list"><div class="empty">Зареждане...</div></div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const u = params.get('u');
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    function render(rows, name) {
+      if (name) document.getElementById('nameHeader').textContent = name;
+      const el = document.getElementById('list');
+      if (!rows || !rows.length) {
+        el.innerHTML = '<div class="empty">Нямаш активни задачи в момента.</div>';
+        return;
+      }
+      el.innerHTML = '<ul class="tasks">' + rows.map(function (t) {
+        return '<li><span class="task-text">' + esc(t.text) + '</span></li>';
+      }).join('') + '</ul>';
+    }
+
+    async function refresh() {
+      if (!u) {
+        document.getElementById('list').innerHTML = '<div class="empty">Липсва личен код в адреса.</div>';
+        return;
+      }
+      try {
+        const res = await fetch(API_URL + '?action=tasks&u=' + encodeURIComponent(u));
+        const data = await res.json();
+        if (data.ok === false) {
+          document.getElementById('list').innerHTML = '<div class="empty">' + esc(data.error || 'Грешка.') + '</div>';
+          return;
+        }
+        render(data.tasks, data.name);
+      } catch (err) {
+        document.getElementById('list').innerHTML = '<div class="empty">Грешка при връзка със сървъра.</div>';
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 15000);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') refresh();
+    });
+  </script>
+</body>
+</html>

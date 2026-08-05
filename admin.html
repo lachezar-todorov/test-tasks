@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Основен панел</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="topbar">Табло • Задачи <span id="todayLabel"></span></div>
+  <div class="wrap">
+    <div class="card">
+      <h2>Нова задача</h2>
+      <div class="addrow">
+        <input type="text" id="newTaskText" placeholder="Описание на задачата...">
+        <select id="newTaskWho"></select>
+        <button class="btn-primary" id="addBtn">Добави</button>
+      </div>
+    </div>
+    <div class="card" id="pendingCard"></div>
+    <div class="card" id="doneCard"></div>
+    <div class="card">
+      <h2>Лични линкове — изпрати на всеки</h2>
+      <ul class="links" id="linksList"></ul>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const NAME_MAP = {
+      geri:  'Гери', zori:  'Зори', zara:  'Зара', tedi:  'Теди',
+      lacho: 'Лъчо', drago: 'Драго', ivo:   'Иво',  todor: 'Тодор'
+    };
+
+    const pin = sessionStorage.getItem('pin');
+    if (!pin) { location.href = 'index.html'; }
+
+    let data = [];
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    async function apiGet(action, extraParams) {
+      const params = new URLSearchParams(Object.assign({ action: action, pin: pin }, extraParams || {}));
+      const res = await fetch(API_URL + '?' + params.toString());
+      return res.json();
+    }
+
+    // ВАЖНО: без header "Content-Type: application/json" — иначе браузърът
+    // праща CORS preflight (OPTIONS), който Apps Script не поддържа.
+    async function apiPost(action, extra) {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        body: JSON.stringify(Object.assign({ action: action, pin: pin }, extra || {}))
+      });
+      return res.json();
+    }
+
+    function onError(err) {
+      console.error('Server error:', err);
+      alert('Грешка от сървъра: ' + (err && err.message ? err.message : err));
+    }
+
+    function render() {
+      if (!Array.isArray(data)) {
+        document.getElementById('pendingCard').innerHTML = '<h2>Активни задачи</h2><div class="empty">Няма данни (виж конзолата за грешка).</div>';
+        document.getElementById('doneCard').innerHTML = '';
+        return;
+      }
+      const pending = data.filter(function (t) { return t.status !== 'Изпълнена'; });
+      const done = data.filter(function (t) { return t.status === 'Изпълнена'; });
+      const order = [], map = {};
+      pending.forEach(function (t) { if (!(t.assignee in map)) { map[t.assignee] = []; order.push(t.assignee); } map[t.assignee].push(t); });
+
+      let html = '<h2>Активни задачи (' + pending.length + ')</h2>';
+      if (order.length) {
+        order.forEach(function (name) {
+          html += '<div class="group-name">' + esc(name) + ' (' + map[name].length + ')</div><ul class="tasks">';
+          map[name].forEach(function (t) {
+            html += '<li><input type="checkbox" class="chk" data-id="' + esc(t.id) + '"><span class="task-text">' + esc(t.text) + '</span><button class="btn-ghost" data-del="' + esc(t.id) + '">✕</button></li>';
+          });
+          html += '</ul>';
+        });
+      } else {
+        html += '<div class="empty">Няма активни задачи.</div>';
+      }
+      document.getElementById('pendingCard').innerHTML = html;
+
+      let doneHtml = '<h2>Изпълнени днес (' + done.length + ')</h2>';
+      if (done.length) {
+        doneHtml += '<ul class="tasks">' + done.map(function (t) {
+          return '<li><input type="checkbox" class="chk" checked data-id="' + esc(t.id) + '"><span class="task-text" style="text-decoration:line-through;color:#8a95a1;">' + esc(t.text) + '</span><span style="font-size:11px;color:#8a95a1;">' + esc(t.assignee) + '</span></li>';
+        }).join('') + '</ul>';
+      } else {
+        doneHtml += '<div class="empty">Все още няма изпълнени задачи.</div>';
+      }
+      doneHtml += '<div class="footer-row"><span class="count">Приключването премества изпълнените в Архив и ги маха от тук — активните остават за утре.</span><button class="btn-export" id="closeDayBtn" ' + (done.length ? '' : 'disabled') + '>Приключи деня</button></div>';
+      document.getElementById('doneCard').innerHTML = doneHtml;
+
+      document.querySelectorAll('.chk').forEach(function (cb) {
+        cb.addEventListener('change', function () { toggle(cb.getAttribute('data-id'), cb.checked); });
+      });
+      document.querySelectorAll('[data-del]').forEach(function (btn) {
+        btn.addEventListener('click', function () { del(btn.getAttribute('data-del')); });
+      });
+      const closeBtn = document.getElementById('closeDayBtn');
+      if (closeBtn) closeBtn.addEventListener('click', closeDay);
+    }
+
+    async function refresh() {
+      try {
+        const res = await apiGet('tasks');
+        if (res.ok === false) { onError({ message: res.error }); return; }
+        data = res.tasks || [];
+        render();
+      } catch (err) { onError(err); }
+    }
+
+    async function addTask() {
+      const text = document.getElementById('newTaskText').value.trim();
+      const who = document.getElementById('newTaskWho').value;
+      if (!text) return;
+      try {
+        const res = await apiPost('addTask', { text: text, assignee: who });
+        if (res.ok === false) { onError({ message: res.error }); return; }
+        data = res.tasks; render();
+        document.getElementById('newTaskText').value = '';
+      } catch (err) { onError(err); }
+    }
+
+    async function toggle(id, checked) {
+      try {
+        const res = await apiPost('toggleTask', { id: id, done: checked });
+        if (res.ok === false) { onError({ message: res.error }); return; }
+        data = res.tasks; render();
+      } catch (err) { onError(err); }
+    }
+
+    async function del(id) {
+      try {
+        const res = await apiPost('deleteTask', { id: id });
+        if (res.ok === false) { onError({ message: res.error }); return; }
+        data = res.tasks; render();
+      } catch (err) { onError(err); }
+    }
+
+    async function closeDay() {
+      if (!confirm('Изпълнените задачи ще се преместят в Архив и ще изчезнат от активния списък. Продължи?')) return;
+      try {
+        const res = await apiPost('closeDay', {});
+        if (res.ok === false) { onError({ message: res.error }); return; }
+        data = res.tasks; render();
+      } catch (err) { onError(err); }
+    }
+
+    function buildLinks() {
+      const base = location.origin + location.pathname.replace('admin.html', '');
+      const list = document.getElementById('linksList');
+      list.innerHTML = Object.keys(NAME_MAP).map(function (slug) {
+        const url = base + 'person.html?u=' + slug;
+        return '<li><b>' + esc(NAME_MAP[slug]) + '</b>' +
+          '<input readonly value="' + esc(url) + '" onclick="this.select()">' +
+          '<button data-copy="' + esc(url) + '">Копирай</button></li>';
+      }).join('');
+      list.querySelectorAll('[data-copy]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          navigator.clipboard.writeText(btn.getAttribute('data-copy'));
+          btn.textContent = 'Копирано ✓';
+        });
+      });
+    }
+
+    // init
+    document.getElementById('todayLabel').textContent = new Date().toLocaleDateString('bg-BG');
+    document.getElementById('newTaskWho').innerHTML = Object.values(NAME_MAP).map(function (n) {
+      return '<option value="' + esc(n) + '">' + esc(n) + '</option>';
+    }).join('');
+    document.getElementById('addBtn').addEventListener('click', addTask);
+    buildLinks();
+    refresh();
+  </script>
+</body>
+</html>

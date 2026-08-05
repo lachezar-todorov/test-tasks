@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Основен панел — вход</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="login-body">
+  <div class="box">
+    <h3>Основен панел</h3>
+    <p class="sub">Влиза само отговорникът</p>
+    <div class="msg" id="msg"></div>
+    <input type="password" id="pin" placeholder="ПИН" autofocus>
+    <button id="loginBtn">Вход</button>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const msgEl = document.getElementById('msg');
+    const pinEl = document.getElementById('pin');
+
+    async function tryLogin() {
+      const pin = pinEl.value.trim();
+      if (!pin) return;
+      msgEl.textContent = '...';
+      try {
+        const res = await fetch(API_URL + '?action=verifyPin&pin=' + encodeURIComponent(pin));
+        const data = await res.json();
+        if (data.ok) {
+          sessionStorage.setItem('pin', pin);
+          location.href = 'admin.html';
+        } else {
+          msgEl.textContent = 'Грешен ПИН, опитай пак.';
+        }
+      } catch (err) {
+        msgEl.textContent = 'Грешка при връзка със сървъра.';
+      }
+    }
+
+    document.getElementById('loginBtn').addEventListener('click', tryLogin);
+    pinEl.addEventListener('keydown', function (e) { if (e.key === 'Enter') tryLogin(); });
+  </script>
+</body>
+</html>
