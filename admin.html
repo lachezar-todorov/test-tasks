@@ -4,13 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Основен панел</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
-  <div class="topbar">Табло • Задачи <span id="todayLabel"></span></div>
+  <div class="topbar">
+    <img class="site-logo" src="logo.svg" alt="" onerror="this.style.display='none'">
+    <span class="topbar-title">Табло • Задачи</span>
+    <span id="todayLabel"></span>
+  </div>
   <div class="wrap">
     <div class="card">
-      <div class="board-tabs" id="boardTabs"></div>
       <h2>Нова задача</h2>
       <div class="addrow">
         <input type="text" id="newTaskText" placeholder="Описание на задачата...">
@@ -29,14 +32,19 @@
 
   <script src="config.js"></script>
   <script>
+    const NAME_MAP = {
+      geri:  'Гери', zori:  'Зори', zara:  'Зара', tedi:  'Теди',
+      lacho: 'Лъчо', drago: 'Драго', ivo:   'Иво',  todor: 'Тодор'
+    };
+
     const pin = sessionStorage.getItem('pin');
     if (!pin) { location.href = 'index.html'; }
 
-    let boardsMeta = {};
-    let currentBoard = sessionStorage.getItem('board') || 'main';
     let data = [];
     let editingId = null;
+    let editingCommentId = null;
     const openComments = new Set();
+    const commentDrafts = {};
 
     function esc(s) {
       return String(s).replace(/[&<>"']/g, function (c) {
@@ -44,12 +52,8 @@
       });
     }
 
-    function currentPeople() {
-      return (boardsMeta[currentBoard] && boardsMeta[currentBoard].people) || {};
-    }
-
     async function apiGet(action, extraParams) {
-      const params = new URLSearchParams(Object.assign({ action: action, pin: pin, board: currentBoard }, extraParams || {}));
+      const params = new URLSearchParams(Object.assign({ action: action, pin: pin }, extraParams || {}));
       const res = await fetch(API_URL + '?' + params.toString());
       return res.json();
     }
@@ -59,7 +63,7 @@
     async function apiPost(action, extra) {
       const res = await fetch(API_URL, {
         method: 'POST',
-        body: JSON.stringify(Object.assign({ action: action, pin: pin, board: currentBoard }, extra || {}))
+        body: JSON.stringify(Object.assign({ action: action, pin: pin }, extra || {}))
       });
       return res.json();
     }
@@ -70,7 +74,7 @@
     }
 
     function peopleOptions(selected) {
-      return Object.values(currentPeople()).map(function (n) {
+      return Object.values(NAME_MAP).map(function (n) {
         return '<option value="' + esc(n) + '"' + (n === selected ? ' selected' : '') + '>' + esc(n) + '</option>';
       }).join('');
     }
@@ -78,13 +82,20 @@
     function commentsHtml(t) {
       const open = openComments.has(t.id);
       const list = (t.comments || []).map(function (c) {
-        return '<div class="comment"><b>' + esc(c.author) + '</b><span class="comment-date">' + esc(c.date) + '</span>' +
-          '<div class="comment-text">' + esc(c.text) + '</div></div>';
+        const cls = c.author === 'Админ' ? 'comment comment-admin' : 'comment comment-person';
+        const body = c.id === editingCommentId
+          ? '<div class="comment-edit-row"><input type="text" class="comment-edit-text" value="' + esc(c.text) + '">' +
+            '<button class="btn-primary comment-edit-save" data-comment="' + esc(c.id) + '">Запази</button>' +
+            '<button class="btn-ghost comment-edit-cancel" data-comment="' + esc(c.id) + '">Отказ</button></div>'
+          : '<div class="comment-text"><span class="comment-text-value">' + esc(c.text) + '</span>' +
+            '<button class="comment-edit-btn" data-comment="' + esc(c.id) + '" title="Редактирай">✎</button></div>';
+        return '<div class="' + cls + '"><b>' + esc(c.author) + '</b><span class="comment-date">' + esc(c.date) + '</span>' + body + '</div>';
       }).join('');
+      const draft = commentDrafts[t.id] || '';
       return '<div class="comments" id="comments-' + esc(t.id) + '" style="display:' + (open ? 'block' : 'none') + '">' +
         '<div class="comment-list">' + (list || '<div class="comment-empty">Няма коментари.</div>') + '</div>' +
         '<div class="comment-add">' +
-          '<input type="text" class="comment-input" data-task="' + esc(t.id) + '" placeholder="Коментар...">' +
+          '<input type="text" class="comment-input" data-task="' + esc(t.id) + '" placeholder="Коментар..." value="' + esc(draft) + '">' +
           '<button class="btn-ghost comment-send" data-task="' + esc(t.id) + '">Изпрати</button>' +
         '</div>' +
       '</div>';
@@ -119,7 +130,7 @@
           html += '<div class="group-name">' + esc(name) + ' (' + g.map[name].length + ')</div><ul class="tasks">';
           g.map[name].forEach(function (t) {
             html += '<li data-id="' + esc(t.id) + '"><div class="task-row">' +
-              '<span class="badge-pending">чака</span>' +
+              '<span class="badge-pending">Чака</span>' +
               '<span class="task-text">' + esc(t.text) + '</span>' +
               commentToggleBtn(t) +
               '<button class="btn-primary" data-approve="' + esc(t.id) + '">Одобри</button>' +
@@ -165,7 +176,7 @@
         html += '<ul class="tasks">' + done.map(function (t) {
           return '<li data-id="' + esc(t.id) + '"><div class="task-row">' +
             '<input type="checkbox" class="chk" checked data-id="' + esc(t.id) + '">' +
-            '<span class="task-text" style="text-decoration:line-through;color:#8a95a1;">' + esc(t.text) + '</span>' +
+            '<span class="task-text task-text-done">' + esc(t.text) + '</span>' +
             '<span class="task-assignee">' + esc(t.assignee) + '</span>' +
             commentToggleBtn(t) +
             '</div>' + commentsHtml(t) + '</li>';
@@ -210,6 +221,11 @@
           render();
         });
       });
+      document.querySelectorAll('.comment-input').forEach(function (input) {
+        input.addEventListener('input', function () {
+          commentDrafts[input.getAttribute('data-task')] = input.value;
+        });
+      });
       document.querySelectorAll('.comment-send').forEach(function (btn) {
         btn.addEventListener('click', function () {
           const id = btn.getAttribute('data-task');
@@ -217,6 +233,20 @@
           const text = input.value.trim();
           if (!text) return;
           addComment(id, text);
+        });
+      });
+      document.querySelectorAll('.comment-edit-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () { editingCommentId = btn.getAttribute('data-comment'); render(); });
+      });
+      document.querySelectorAll('.comment-edit-cancel').forEach(function (btn) {
+        btn.addEventListener('click', function () { editingCommentId = null; render(); });
+      });
+      document.querySelectorAll('.comment-edit-save').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const wrap = btn.closest('.comment-edit-row');
+          const text = wrap.querySelector('.comment-edit-text').value.trim();
+          if (!text) return;
+          editComment(btn.getAttribute('data-comment'), text);
         });
       });
       const closeBtn = document.getElementById('closeDayBtn');
@@ -295,7 +325,17 @@
       try {
         const res = await apiPost('addComment', { taskId: taskId, text: text });
         if (res.ok === false) { onError({ message: res.error }); return; }
+        delete commentDrafts[taskId];
         openComments.add(taskId);
+        data = res.tasks; render();
+      } catch (err) { onError(err); }
+    }
+
+    async function editComment(commentId, text) {
+      try {
+        const res = await apiPost('editComment', { commentId: commentId, text: text });
+        if (res.ok === false) { onError({ message: res.error }); return; }
+        editingCommentId = null;
         data = res.tasks; render();
       } catch (err) { onError(err); }
     }
@@ -312,18 +352,12 @@
     function buildLinks() {
       const base = location.origin + location.pathname.replace('admin.html', '');
       const list = document.getElementById('linksList');
-      let html = '';
-      Object.keys(boardsMeta).forEach(function (boardKey) {
-        const b = boardsMeta[boardKey];
-        html += '<li style="border-top:none;padding-bottom:0;"><b>' + esc(b.label) + '</b></li>';
-        Object.keys(b.people).forEach(function (slug) {
-          const url = base + 'person.html?u=' + slug + (boardKey === 'main' ? '' : '&board=' + boardKey);
-          html += '<li><span style="min-width:70px;">' + esc(b.people[slug]) + '</span>' +
-            '<input readonly value="' + esc(url) + '" onclick="this.select()">' +
-            '<button data-copy="' + esc(url) + '">Копирай</button></li>';
-        });
-      });
-      list.innerHTML = html;
+      list.innerHTML = Object.keys(NAME_MAP).map(function (slug) {
+        const url = base + 'person.html?u=' + slug;
+        return '<li><b>' + esc(NAME_MAP[slug]) + '</b>' +
+          '<input readonly value="' + esc(url) + '" onclick="this.select()">' +
+          '<button data-copy="' + esc(url) + '">Копирай</button></li>';
+      }).join('');
       list.querySelectorAll('[data-copy]').forEach(function (btn) {
         btn.addEventListener('click', function () {
           navigator.clipboard.writeText(btn.getAttribute('data-copy'));
@@ -332,40 +366,18 @@
       });
     }
 
-    function renderBoardTabs() {
-      const el = document.getElementById('boardTabs');
-      el.innerHTML = Object.keys(boardsMeta).map(function (k) {
-        return '<button class="board-tab' + (k === currentBoard ? ' active' : '') + '" data-board="' + esc(k) + '">' + esc(boardsMeta[k].label) + '</button>';
-      }).join('');
-      el.querySelectorAll('[data-board]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          currentBoard = btn.getAttribute('data-board');
-          sessionStorage.setItem('board', currentBoard);
-          editingId = null;
-          openComments.clear();
-          renderBoardTabs();
-          document.getElementById('newTaskWho').innerHTML = peopleOptions();
-          refresh();
-        });
-      });
-    }
+    // init
+    document.getElementById('todayLabel').textContent = new Date().toLocaleDateString('bg-BG');
+    document.getElementById('newTaskWho').innerHTML = peopleOptions();
+    document.getElementById('addBtn').addEventListener('click', addTask);
+    buildLinks();
+    refresh();
 
-    async function init() {
-      document.getElementById('todayLabel').textContent = new Date().toLocaleDateString('bg-BG');
-      try {
-        const meta = await apiGet('meta');
-        if (meta.ok === false) { onError({ message: meta.error }); return; }
-        boardsMeta = meta.boards || {};
-      } catch (err) { onError(err); return; }
-      if (!boardsMeta[currentBoard]) currentBoard = 'main';
-      renderBoardTabs();
-      document.getElementById('newTaskWho').innerHTML = peopleOptions();
-      document.getElementById('addBtn').addEventListener('click', addTask);
-      buildLinks();
-      refresh();
-    }
-
-    init();
+    // автоматично опресняване — не пипа задача/коментар, който в момента се редактира
+    setInterval(function () { if (!editingId && !editingCommentId) refresh(); }, 15000);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && !editingId && !editingCommentId) refresh();
+    });
   </script>
 </body>
 </html>
