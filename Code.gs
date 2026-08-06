@@ -94,7 +94,7 @@ function backfillCommentTaskNames() {
   }
 }
 
-/** Чете задачите, най-новите първи (най-долният ред в Sheet-а = последно добавен). */
+/** Чете задачите (реда тук е без значение — sortByActivity_ подрежда накрая). */
 function readTasks_() {
   const { t } = ensureSheets_();
   const values = t.getDataRange().getValues();
@@ -103,14 +103,16 @@ function readTasks_() {
   for (let i = values.length - 1; i >= 1; i--) {
     const r = values[i];
     if (!r[0]) continue;
+    const createdDate = r[4] instanceof Date ? r[4] : (r[4] ? new Date(r[4]) : null);
     rows.push({
       sheetRow: i + 1,
       id: String(r[0]),
       text: r[1],
       assignee: r[2],
       status: r[3],
-      created: r[4] instanceof Date ? Utilities.formatDate(r[4], tz, 'dd.MM.yyyy HH:mm') : String(r[4] || ''),
-      done: r[5] instanceof Date ? Utilities.formatDate(r[5], tz, 'dd.MM.yyyy HH:mm') : String(r[5] || '')
+      created: createdDate ? Utilities.formatDate(createdDate, tz, 'dd.MM.yyyy HH:mm') : String(r[4] || ''),
+      done: r[5] instanceof Date ? Utilities.formatDate(r[5], tz, 'dd.MM.yyyy HH:mm') : String(r[5] || ''),
+      createdRaw_: createdDate ? createdDate.getTime() : 0
     });
   }
   return rows;
@@ -127,12 +129,14 @@ function readComments_() {
     if (!r[0]) continue;
     const taskId = String(r[1]);
     if (!map[taskId]) map[taskId] = [];
+    const dateVal = r[4] instanceof Date ? r[4] : (r[4] ? new Date(r[4]) : null);
     map[taskId].push({
       id: String(r[0]),
       author: r[2],
       text: r[3],
-      date: r[4] instanceof Date ? Utilities.formatDate(r[4], tz, 'dd.MM.yyyy HH:mm') : String(r[4] || ''),
-      taskText: r[5] || ''
+      date: dateVal ? Utilities.formatDate(dateVal, tz, 'dd.MM.yyyy HH:mm') : String(r[4] || ''),
+      taskText: r[5] || '',
+      dateRaw_: dateVal ? dateVal.getTime() : 0
     });
   }
   return map;
@@ -151,11 +155,23 @@ function json_(obj) {
 
 /** Изгражда пълния отговор със задачи (+коментари), според това дали
  *  извикващият е админ (вижда всичко) или личен потребител (вижда само своите).
+ *  Подрежда задачите по последна активност (създаване или последен нов/
+ *  редактиран коментар) — най-скоро активната отгоре.
  */
 function buildTasksPayload_(opts) {
   const rows = readTasks_().map(stripSheetRow_);
   const commentsMap = readComments_();
-  rows.forEach(function (r) { r.comments = commentsMap[r.id] || []; });
+  rows.forEach(function (r) {
+    r.comments = commentsMap[r.id] || [];
+    const commentTimes = r.comments.map(function (cm) { return cm.dateRaw_ || 0; });
+    r.lastActivity_ = Math.max(r.createdRaw_ || 0, commentTimes.length ? Math.max.apply(null, commentTimes) : 0);
+  });
+  rows.sort(function (a, b) { return b.lastActivity_ - a.lastActivity_; });
+  rows.forEach(function (r) {
+    delete r.createdRaw_;
+    delete r.lastActivity_;
+    r.comments.forEach(function (cm) { delete cm.dateRaw_; });
+  });
 
   if (opts && opts.u && NAME_MAP[opts.u]) {
     const name = NAME_MAP[opts.u];
@@ -317,6 +333,25 @@ function doPost(e) {
         return json_({ ok: false, error: 'Можеш да редактираш само своите коментари.' });
       }
       c.getRange(targetRow, 4).setValue(text);
+      // датата се обновява, за да преброи като нова активност (задачата отива най-отгоре)
+      c.getRange(targetRow, 5).setValue(new Date());
+      return tasksResponse_(isAdmin ? undefined : { u: body.u });
+    }
+
+    case 'deleteComment': {
+      const commentId = body.commentId;
+      if (!commentId) return json_({ ok: false, error: 'Липсва коментар.' });
+      const { c } = ensureSheets_();
+      const values = c.getDataRange().getValues();
+      let targetRow = -1, author = null;
+      for (let i = 1; i < values.length; i++) {
+        if (String(values[i][0]) === commentId) { targetRow = i + 1; author = values[i][2]; break; }
+      }
+      if (targetRow === -1) return json_({ ok: false, error: 'Коментарът не е намерен.' });
+      if (!isAdmin && author !== personName) {
+        return json_({ ok: false, error: 'Можеш да изтриваш само своите коментари.' });
+      }
+      c.deleteRow(targetRow);
       return tasksResponse_(isAdmin ? undefined : { u: body.u });
     }
 
