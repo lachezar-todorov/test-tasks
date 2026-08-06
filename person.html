@@ -4,10 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Моите задачи</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
-  <div class="card person" style="max-width:520px;margin:40px auto 0;">
+  <div class="person-header">
+    <img class="site-logo" src="logo.svg" alt="" onerror="this.style.display='none'">
+  </div>
+  <div class="card person" style="max-width:520px;margin:8px auto 0;">
     <h2 id="nameHeader">Задачи</h2>
     <p class="sub-note">Списъкът се обновява автоматично. Най-новите задачи са отгоре.</p>
     <div class="propose-row">
@@ -27,10 +30,12 @@
   <script>
     const params = new URLSearchParams(location.search);
     const u = params.get('u');
-    const board = params.get('board') || 'main';
     const openComments = new Set();
+    const commentDrafts = {};
+    let editingCommentId = null;
     let tasksData = [];
     let pendingData = [];
+    let myName = '';
 
     function esc(s) {
       return String(s).replace(/[&<>"']/g, function (c) {
@@ -41,13 +46,25 @@
     function commentsHtml(t) {
       const open = openComments.has(t.id);
       const list = (t.comments || []).map(function (c) {
-        return '<div class="comment"><b>' + esc(c.author) + '</b><span class="comment-date">' + esc(c.date) + '</span>' +
-          '<div class="comment-text">' + esc(c.text) + '</div></div>';
+        const cls = c.author === 'Админ' ? 'comment comment-admin' : 'comment comment-person';
+        const canEdit = c.author === myName;
+        let body;
+        if (c.id === editingCommentId) {
+          body = '<div class="comment-edit-row"><input type="text" class="comment-edit-text" value="' + esc(c.text) + '">' +
+            '<button class="btn-primary comment-edit-save" data-comment="' + esc(c.id) + '">Запази</button>' +
+            '<button class="btn-ghost comment-edit-cancel" data-comment="' + esc(c.id) + '">Отказ</button></div>';
+        } else {
+          body = '<div class="comment-text"><span class="comment-text-value">' + esc(c.text) + '</span>' +
+            (canEdit ? '<button class="comment-edit-btn" data-comment="' + esc(c.id) + '" title="Редактирай">✎</button>' : '') +
+            '</div>';
+        }
+        return '<div class="' + cls + '"><b>' + esc(c.author) + '</b><span class="comment-date">' + esc(c.date) + '</span>' + body + '</div>';
       }).join('');
+      const draft = commentDrafts[t.id] || '';
       return '<div class="comments" id="comments-' + esc(t.id) + '" style="display:' + (open ? 'block' : 'none') + '">' +
         '<div class="comment-list">' + (list || '<div class="comment-empty">Няма коментари.</div>') + '</div>' +
         '<div class="comment-add">' +
-          '<input type="text" class="comment-input" data-task="' + esc(t.id) + '" placeholder="Коментар...">' +
+          '<input type="text" class="comment-input" data-task="' + esc(t.id) + '" placeholder="Коментар..." value="' + esc(draft) + '">' +
           '<button class="btn-ghost comment-send" data-task="' + esc(t.id) + '">Изпрати</button>' +
         '</div>' +
       '</div>';
@@ -81,6 +98,11 @@
           render(tasksData, pendingData, document.getElementById('nameHeader').textContent);
         });
       });
+      scope.querySelectorAll('.comment-input').forEach(function (input) {
+        input.addEventListener('input', function () {
+          commentDrafts[input.getAttribute('data-task')] = input.value;
+        });
+      });
       scope.querySelectorAll('.comment-send').forEach(function (btn) {
         btn.addEventListener('click', function () {
           const id = btn.getAttribute('data-task');
@@ -90,10 +112,30 @@
           addComment(id, text);
         });
       });
+      scope.querySelectorAll('.comment-edit-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          editingCommentId = btn.getAttribute('data-comment');
+          render(tasksData, pendingData, document.getElementById('nameHeader').textContent);
+        });
+      });
+      scope.querySelectorAll('.comment-edit-cancel').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          editingCommentId = null;
+          render(tasksData, pendingData, document.getElementById('nameHeader').textContent);
+        });
+      });
+      scope.querySelectorAll('.comment-edit-save').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const wrap = btn.closest('.comment-edit-row');
+          const text = wrap.querySelector('.comment-edit-text').value.trim();
+          if (!text) return;
+          editComment(btn.getAttribute('data-comment'), text);
+        });
+      });
     }
 
     function render(rows, pending, name) {
-      if (name) document.getElementById('nameHeader').textContent = name;
+      if (name) { document.getElementById('nameHeader').textContent = name; myName = name; }
       renderList('list', rows, 'Нямаш активни задачи в момента.');
       renderList('pendingList', pending, 'Нямаш непотвърдени задачи в момента.');
     }
@@ -105,7 +147,7 @@
         return;
       }
       try {
-        const res = await fetch(API_URL + '?action=tasks&u=' + encodeURIComponent(u) + '&board=' + encodeURIComponent(board));
+        const res = await fetch(API_URL + '?action=tasks&u=' + encodeURIComponent(u));
         const data = await res.json();
         if (data.ok === false) {
           document.getElementById('list').innerHTML = '<div class="empty">' + esc(data.error || 'Грешка.') + '</div>';
@@ -126,7 +168,7 @@
       try {
         const res = await fetch(API_URL, {
           method: 'POST',
-          body: JSON.stringify({ action: 'personAddTask', u: u, board: board, text: text })
+          body: JSON.stringify({ action: 'personAddTask', u: u, text: text })
         });
         const data = await res.json();
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
@@ -143,11 +185,29 @@
       try {
         const res = await fetch(API_URL, {
           method: 'POST',
-          body: JSON.stringify({ action: 'addComment', u: u, board: board, taskId: taskId, text: text })
+          body: JSON.stringify({ action: 'addComment', u: u, taskId: taskId, text: text })
         });
         const data = await res.json();
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
+        delete commentDrafts[taskId];
         openComments.add(taskId);
+        tasksData = data.tasks || [];
+        pendingData = data.pendingTasks || [];
+        render(tasksData, pendingData, data.name);
+      } catch (err) {
+        alert('Грешка при връзка със сървъра.');
+      }
+    }
+
+    async function editComment(commentId, text) {
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'editComment', u: u, commentId: commentId, text: text })
+        });
+        const data = await res.json();
+        if (data.ok === false) { alert('Грешка: ' + data.error); return; }
+        editingCommentId = null;
         tasksData = data.tasks || [];
         pendingData = data.pendingTasks || [];
         render(tasksData, pendingData, data.name);
@@ -158,9 +218,9 @@
 
     document.getElementById('addBtn').addEventListener('click', addTask);
     refresh();
-    setInterval(refresh, 15000);
+    setInterval(function () { if (!editingCommentId) refresh(); }, 15000);
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') refresh();
+      if (document.visibilityState === 'visible' && !editingCommentId) refresh();
     });
   </script>
 </body>
