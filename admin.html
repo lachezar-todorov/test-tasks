@@ -10,6 +10,7 @@
   <div class="topbar">Табло • Задачи <span id="todayLabel"></span></div>
   <div class="wrap">
     <div class="card">
+      <div class="board-tabs" id="boardTabs"></div>
       <h2>Нова задача</h2>
       <div class="addrow">
         <input type="text" id="newTaskText" placeholder="Описание на задачата...">
@@ -17,7 +18,8 @@
         <button class="btn-primary" id="addBtn">Добави</button>
       </div>
     </div>
-    <div class="card" id="pendingCard"></div>
+    <div class="card pending-card" id="approvalCard"></div>
+    <div class="card" id="activeCard"></div>
     <div class="card" id="doneCard"></div>
     <div class="card">
       <h2>Лични линкове — изпрати на всеки</h2>
@@ -27,15 +29,14 @@
 
   <script src="config.js"></script>
   <script>
-    const NAME_MAP = {
-      geri:  'Гери', zori:  'Зори', zara:  'Зара', tedi:  'Теди',
-      lacho: 'Лъчо', drago: 'Драго', ivo:   'Иво',  todor: 'Тодор'
-    };
-
     const pin = sessionStorage.getItem('pin');
     if (!pin) { location.href = 'index.html'; }
 
+    let boardsMeta = {};
+    let currentBoard = sessionStorage.getItem('board') || 'main';
     let data = [];
+    let editingId = null;
+    const openComments = new Set();
 
     function esc(s) {
       return String(s).replace(/[&<>"']/g, function (c) {
@@ -43,8 +44,12 @@
       });
     }
 
+    function currentPeople() {
+      return (boardsMeta[currentBoard] && boardsMeta[currentBoard].people) || {};
+    }
+
     async function apiGet(action, extraParams) {
-      const params = new URLSearchParams(Object.assign({ action: action, pin: pin }, extraParams || {}));
+      const params = new URLSearchParams(Object.assign({ action: action, pin: pin, board: currentBoard }, extraParams || {}));
       const res = await fetch(API_URL + '?' + params.toString());
       return res.json();
     }
@@ -54,7 +59,7 @@
     async function apiPost(action, extra) {
       const res = await fetch(API_URL, {
         method: 'POST',
-        body: JSON.stringify(Object.assign({ action: action, pin: pin }, extra || {}))
+        body: JSON.stringify(Object.assign({ action: action, pin: pin, board: currentBoard }, extra || {}))
       });
       return res.json();
     }
@@ -64,50 +69,171 @@
       alert('Грешка от сървъра: ' + (err && err.message ? err.message : err));
     }
 
-    function render() {
-      if (!Array.isArray(data)) {
-        document.getElementById('pendingCard').innerHTML = '<h2>Активни задачи</h2><div class="empty">Няма данни (виж конзолата за грешка).</div>';
-        document.getElementById('doneCard').innerHTML = '';
-        return;
-      }
-      const pending = data.filter(function (t) { return t.status !== 'Изпълнена'; });
-      const done = data.filter(function (t) { return t.status === 'Изпълнена'; });
-      const order = [], map = {};
-      pending.forEach(function (t) { if (!(t.assignee in map)) { map[t.assignee] = []; order.push(t.assignee); } map[t.assignee].push(t); });
+    function peopleOptions(selected) {
+      return Object.values(currentPeople()).map(function (n) {
+        return '<option value="' + esc(n) + '"' + (n === selected ? ' selected' : '') + '>' + esc(n) + '</option>';
+      }).join('');
+    }
 
-      let html = '<h2>Активни задачи (' + pending.length + ')</h2>';
-      if (order.length) {
-        order.forEach(function (name) {
-          html += '<div class="group-name">' + esc(name) + ' (' + map[name].length + ')</div><ul class="tasks">';
-          map[name].forEach(function (t) {
-            html += '<li><input type="checkbox" class="chk" data-id="' + esc(t.id) + '"><span class="task-text">' + esc(t.text) + '</span><button class="btn-ghost" data-del="' + esc(t.id) + '">✕</button></li>';
+    function commentsHtml(t) {
+      const open = openComments.has(t.id);
+      const list = (t.comments || []).map(function (c) {
+        return '<div class="comment"><b>' + esc(c.author) + '</b><span class="comment-date">' + esc(c.date) + '</span>' +
+          '<div class="comment-text">' + esc(c.text) + '</div></div>';
+      }).join('');
+      return '<div class="comments" id="comments-' + esc(t.id) + '" style="display:' + (open ? 'block' : 'none') + '">' +
+        '<div class="comment-list">' + (list || '<div class="comment-empty">Няма коментари.</div>') + '</div>' +
+        '<div class="comment-add">' +
+          '<input type="text" class="comment-input" data-task="' + esc(t.id) + '" placeholder="Коментар...">' +
+          '<button class="btn-ghost comment-send" data-task="' + esc(t.id) + '">Изпрати</button>' +
+        '</div>' +
+      '</div>';
+    }
+
+    function commentToggleBtn(t) {
+      const n = (t.comments || []).length;
+      return '<button class="btn-ghost comment-toggle" data-toggle="' + esc(t.id) + '">💬 ' + n + '</button>';
+    }
+
+    function editRowHtml(t) {
+      return '<div class="edit-row">' +
+        '<input type="text" class="edit-text" value="' + esc(t.text) + '">' +
+        '<select class="edit-assignee">' + peopleOptions(t.assignee) + '</select>' +
+        '<button class="btn-primary edit-save" data-id="' + esc(t.id) + '">Запази</button>' +
+        '<button class="btn-ghost edit-cancel" data-id="' + esc(t.id) + '">Отказ</button>' +
+      '</div>';
+    }
+
+    function groupByAssignee(rows) {
+      const order = [], map = {};
+      rows.forEach(function (t) { if (!(t.assignee in map)) { map[t.assignee] = []; order.push(t.assignee); } map[t.assignee].push(t); });
+      return { order: order, map: map };
+    }
+
+    function renderApproval() {
+      const pending = data.filter(function (t) { return t.status === 'Чака одобрение'; });
+      let html = '<h2>Чакат одобрение (' + pending.length + ')</h2>';
+      if (pending.length) {
+        const g = groupByAssignee(pending);
+        g.order.forEach(function (name) {
+          html += '<div class="group-name">' + esc(name) + ' (' + g.map[name].length + ')</div><ul class="tasks">';
+          g.map[name].forEach(function (t) {
+            html += '<li data-id="' + esc(t.id) + '"><div class="task-row">' +
+              '<span class="badge-pending">чака</span>' +
+              '<span class="task-text">' + esc(t.text) + '</span>' +
+              commentToggleBtn(t) +
+              '<button class="btn-primary" data-approve="' + esc(t.id) + '">Одобри</button>' +
+              '<button class="btn-ghost" data-del="' + esc(t.id) + '">Отхвърли</button>' +
+              '</div>' + commentsHtml(t) + '</li>';
+          });
+          html += '</ul>';
+        });
+      } else {
+        html += '<div class="empty">Няма предложени задачи, чакащи одобрение.</div>';
+      }
+      document.getElementById('approvalCard').innerHTML = html;
+    }
+
+    function renderActive() {
+      const active = data.filter(function (t) { return t.status === 'Активна'; });
+      let html = '<h2>Активни задачи (' + active.length + ')</h2>';
+      if (active.length) {
+        const g = groupByAssignee(active);
+        g.order.forEach(function (name) {
+          html += '<div class="group-name">' + esc(name) + ' (' + g.map[name].length + ')</div><ul class="tasks">';
+          g.map[name].forEach(function (t) {
+            const row = t.id === editingId ? editRowHtml(t) :
+              '<input type="checkbox" class="chk" data-id="' + esc(t.id) + '">' +
+              '<span class="task-text">' + esc(t.text) + '</span>' +
+              commentToggleBtn(t) +
+              '<button class="btn-ghost" data-edit="' + esc(t.id) + '">✎</button>' +
+              '<button class="btn-ghost" data-del="' + esc(t.id) + '">✕</button>';
+            html += '<li data-id="' + esc(t.id) + '"><div class="task-row">' + row + '</div>' + commentsHtml(t) + '</li>';
           });
           html += '</ul>';
         });
       } else {
         html += '<div class="empty">Няма активни задачи.</div>';
       }
-      document.getElementById('pendingCard').innerHTML = html;
+      document.getElementById('activeCard').innerHTML = html;
+    }
 
-      let doneHtml = '<h2>Изпълнени днес (' + done.length + ')</h2>';
+    function renderDone() {
+      const done = data.filter(function (t) { return t.status === 'Изпълнена'; });
+      let html = '<h2>Изпълнени днес (' + done.length + ')</h2>';
       if (done.length) {
-        doneHtml += '<ul class="tasks">' + done.map(function (t) {
-          return '<li><input type="checkbox" class="chk" checked data-id="' + esc(t.id) + '"><span class="task-text" style="text-decoration:line-through;color:#8a95a1;">' + esc(t.text) + '</span><span style="font-size:11px;color:#8a95a1;">' + esc(t.assignee) + '</span></li>';
+        html += '<ul class="tasks">' + done.map(function (t) {
+          return '<li data-id="' + esc(t.id) + '"><div class="task-row">' +
+            '<input type="checkbox" class="chk" checked data-id="' + esc(t.id) + '">' +
+            '<span class="task-text" style="text-decoration:line-through;color:#8a95a1;">' + esc(t.text) + '</span>' +
+            '<span class="task-assignee">' + esc(t.assignee) + '</span>' +
+            commentToggleBtn(t) +
+            '</div>' + commentsHtml(t) + '</li>';
         }).join('') + '</ul>';
       } else {
-        doneHtml += '<div class="empty">Все още няма изпълнени задачи.</div>';
+        html += '<div class="empty">Все още няма изпълнени задачи.</div>';
       }
-      doneHtml += '<div class="footer-row"><span class="count">Приключването премества изпълнените в Архив и ги маха от тук — активните остават за утре.</span><button class="btn-export" id="closeDayBtn" ' + (done.length ? '' : 'disabled') + '>Приключи деня</button></div>';
-      document.getElementById('doneCard').innerHTML = doneHtml;
+      html += '<div class="footer-row"><span class="count">Приключването премества изпълнените в Архив и ги маха от тук — активните остават за утре.</span>' +
+        '<button class="btn-export" id="closeDayBtn" ' + (done.length ? '' : 'disabled') + '>Приключи деня</button></div>';
+      document.getElementById('doneCard').innerHTML = html;
+    }
 
+    function attachHandlers() {
       document.querySelectorAll('.chk').forEach(function (cb) {
         cb.addEventListener('change', function () { toggle(cb.getAttribute('data-id'), cb.checked); });
       });
       document.querySelectorAll('[data-del]').forEach(function (btn) {
         btn.addEventListener('click', function () { del(btn.getAttribute('data-del')); });
       });
+      document.querySelectorAll('[data-approve]').forEach(function (btn) {
+        btn.addEventListener('click', function () { approve(btn.getAttribute('data-approve')); });
+      });
+      document.querySelectorAll('[data-edit]').forEach(function (btn) {
+        btn.addEventListener('click', function () { editingId = btn.getAttribute('data-edit'); render(); });
+      });
+      document.querySelectorAll('.edit-cancel').forEach(function (btn) {
+        btn.addEventListener('click', function () { editingId = null; render(); });
+      });
+      document.querySelectorAll('.edit-save').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const li = btn.closest('li');
+          const text = li.querySelector('.edit-text').value.trim();
+          const assignee = li.querySelector('.edit-assignee').value;
+          if (!text) return;
+          editTask(btn.getAttribute('data-id'), text, assignee);
+        });
+      });
+      document.querySelectorAll('[data-toggle]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const id = btn.getAttribute('data-toggle');
+          if (openComments.has(id)) openComments.delete(id); else openComments.add(id);
+          render();
+        });
+      });
+      document.querySelectorAll('.comment-send').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const id = btn.getAttribute('data-task');
+          const input = document.querySelector('.comment-input[data-task="' + CSS.escape(id) + '"]');
+          const text = input.value.trim();
+          if (!text) return;
+          addComment(id, text);
+        });
+      });
       const closeBtn = document.getElementById('closeDayBtn');
       if (closeBtn) closeBtn.addEventListener('click', closeDay);
+    }
+
+    function render() {
+      if (!Array.isArray(data)) {
+        document.getElementById('approvalCard').innerHTML = '';
+        document.getElementById('activeCard').innerHTML = '<h2>Активни задачи</h2><div class="empty">Няма данни (виж конзолата за грешка).</div>';
+        document.getElementById('doneCard').innerHTML = '';
+        return;
+      }
+      renderApproval();
+      renderActive();
+      renderDone();
+      attachHandlers();
     }
 
     async function refresh() {
@@ -131,6 +257,23 @@
       } catch (err) { onError(err); }
     }
 
+    async function editTask(id, text, assignee) {
+      try {
+        const res = await apiPost('editTask', { id: id, text: text, assignee: assignee });
+        if (res.ok === false) { onError({ message: res.error }); return; }
+        editingId = null;
+        data = res.tasks; render();
+      } catch (err) { onError(err); }
+    }
+
+    async function approve(id) {
+      try {
+        const res = await apiPost('approveTask', { id: id });
+        if (res.ok === false) { onError({ message: res.error }); return; }
+        data = res.tasks; render();
+      } catch (err) { onError(err); }
+    }
+
     async function toggle(id, checked) {
       try {
         const res = await apiPost('toggleTask', { id: id, done: checked });
@@ -140,9 +283,19 @@
     }
 
     async function del(id) {
+      if (!confirm('Да изтрия ли тази задача?')) return;
       try {
         const res = await apiPost('deleteTask', { id: id });
         if (res.ok === false) { onError({ message: res.error }); return; }
+        data = res.tasks; render();
+      } catch (err) { onError(err); }
+    }
+
+    async function addComment(taskId, text) {
+      try {
+        const res = await apiPost('addComment', { taskId: taskId, text: text });
+        if (res.ok === false) { onError({ message: res.error }); return; }
+        openComments.add(taskId);
         data = res.tasks; render();
       } catch (err) { onError(err); }
     }
@@ -159,12 +312,18 @@
     function buildLinks() {
       const base = location.origin + location.pathname.replace('admin.html', '');
       const list = document.getElementById('linksList');
-      list.innerHTML = Object.keys(NAME_MAP).map(function (slug) {
-        const url = base + 'person.html?u=' + slug;
-        return '<li><b>' + esc(NAME_MAP[slug]) + '</b>' +
-          '<input readonly value="' + esc(url) + '" onclick="this.select()">' +
-          '<button data-copy="' + esc(url) + '">Копирай</button></li>';
-      }).join('');
+      let html = '';
+      Object.keys(boardsMeta).forEach(function (boardKey) {
+        const b = boardsMeta[boardKey];
+        html += '<li style="border-top:none;padding-bottom:0;"><b>' + esc(b.label) + '</b></li>';
+        Object.keys(b.people).forEach(function (slug) {
+          const url = base + 'person.html?u=' + slug + (boardKey === 'main' ? '' : '&board=' + boardKey);
+          html += '<li><span style="min-width:70px;">' + esc(b.people[slug]) + '</span>' +
+            '<input readonly value="' + esc(url) + '" onclick="this.select()">' +
+            '<button data-copy="' + esc(url) + '">Копирай</button></li>';
+        });
+      });
+      list.innerHTML = html;
       list.querySelectorAll('[data-copy]').forEach(function (btn) {
         btn.addEventListener('click', function () {
           navigator.clipboard.writeText(btn.getAttribute('data-copy'));
@@ -173,14 +332,40 @@
       });
     }
 
-    // init
-    document.getElementById('todayLabel').textContent = new Date().toLocaleDateString('bg-BG');
-    document.getElementById('newTaskWho').innerHTML = Object.values(NAME_MAP).map(function (n) {
-      return '<option value="' + esc(n) + '">' + esc(n) + '</option>';
-    }).join('');
-    document.getElementById('addBtn').addEventListener('click', addTask);
-    buildLinks();
-    refresh();
+    function renderBoardTabs() {
+      const el = document.getElementById('boardTabs');
+      el.innerHTML = Object.keys(boardsMeta).map(function (k) {
+        return '<button class="board-tab' + (k === currentBoard ? ' active' : '') + '" data-board="' + esc(k) + '">' + esc(boardsMeta[k].label) + '</button>';
+      }).join('');
+      el.querySelectorAll('[data-board]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          currentBoard = btn.getAttribute('data-board');
+          sessionStorage.setItem('board', currentBoard);
+          editingId = null;
+          openComments.clear();
+          renderBoardTabs();
+          document.getElementById('newTaskWho').innerHTML = peopleOptions();
+          refresh();
+        });
+      });
+    }
+
+    async function init() {
+      document.getElementById('todayLabel').textContent = new Date().toLocaleDateString('bg-BG');
+      try {
+        const meta = await apiGet('meta');
+        if (meta.ok === false) { onError({ message: meta.error }); return; }
+        boardsMeta = meta.boards || {};
+      } catch (err) { onError(err); return; }
+      if (!boardsMeta[currentBoard]) currentBoard = 'main';
+      renderBoardTabs();
+      document.getElementById('newTaskWho').innerHTML = peopleOptions();
+      document.getElementById('addBtn').addEventListener('click', addTask);
+      buildLinks();
+      refresh();
+    }
+
+    init();
   </script>
 </body>
 </html>
