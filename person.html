@@ -117,6 +117,13 @@
         (unread ? '<span class="unread-dot"></span>' : '') + esc(t.text) + '</span>';
     }
 
+    // Отделен бутон само за да маркираш САМАТА задача като видяна, без да
+    // отваряш панела с коментари (тях ги маркираш поотделно, с клик върху всеки).
+    function markReadBtnHtml(t) {
+      if (!isTaskUnread(t)) return '';
+      return '<button class="btn-ghost mark-read-btn" data-mark-read="' + esc(t.id) + '" title="Маркирай задачата като прочетена">✓ Прочетено</button>';
+    }
+
     function renderList(elId, rows, emptyMsg) {
       const el = document.getElementById(elId);
       if (!rows || !rows.length) {
@@ -126,6 +133,7 @@
       el.innerHTML = '<ul class="tasks">' + rows.map(function (t) {
         return '<li data-id="' + esc(t.id) + '"><div class="task-row">' +
           taskTextHtml(t) +
+          markReadBtnHtml(t) +
           commentToggleBtn(t) +
           '</div>' + commentsHtml(t) + '</li>';
       }).join('') + '</ul>';
@@ -143,6 +151,14 @@
             const t = tasksData.concat(pendingData).find(function (x) { return x.id === id; });
             if (t) markTaskOpened(t);
           }
+          render(tasksData, pendingData, document.getElementById('nameHeader').textContent);
+        });
+      });
+      scope.querySelectorAll('[data-mark-read]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const id = btn.getAttribute('data-mark-read');
+          const t = tasksData.concat(pendingData).find(function (x) { return x.id === id; });
+          if (t) markTaskOpened(t);
           render(tasksData, pendingData, document.getElementById('nameHeader').textContent);
         });
       });
