@@ -9,14 +9,28 @@
 <body>
   <div class="card person" style="max-width:520px;margin:40px auto 0;">
     <h2 id="nameHeader">Задачи</h2>
-    <p class="sub-note">Само за преглед — списъкът се обновява автоматично.</p>
+    <p class="sub-note">Списъкът се обновява автоматично. Най-новите задачи са отгоре.</p>
+    <div class="propose-row">
+      <input type="text" id="newTaskText" placeholder="Предложи си задача...">
+      <button class="btn-primary" id="addBtn">Добави</button>
+    </div>
     <div id="list"><div class="empty">Зареждане...</div></div>
+  </div>
+
+  <div class="card person pending-card" style="max-width:520px;margin:20px auto 0;">
+    <h2>Непотвърдени задачи</h2>
+    <p class="sub-note">Тези задачи си ги предложил сам — чакат одобрение от администраторския панел.</p>
+    <div id="pendingList"><div class="empty">Зареждане...</div></div>
   </div>
 
   <script src="config.js"></script>
   <script>
     const params = new URLSearchParams(location.search);
     const u = params.get('u');
+    const board = params.get('board') || 'main';
+    const openComments = new Set();
+    let tasksData = [];
+    let pendingData = [];
 
     function esc(s) {
       return String(s).replace(/[&<>"']/g, function (c) {
@@ -24,36 +38,125 @@
       });
     }
 
-    function render(rows, name) {
-      if (name) document.getElementById('nameHeader').textContent = name;
-      const el = document.getElementById('list');
+    function commentsHtml(t) {
+      const open = openComments.has(t.id);
+      const list = (t.comments || []).map(function (c) {
+        return '<div class="comment"><b>' + esc(c.author) + '</b><span class="comment-date">' + esc(c.date) + '</span>' +
+          '<div class="comment-text">' + esc(c.text) + '</div></div>';
+      }).join('');
+      return '<div class="comments" id="comments-' + esc(t.id) + '" style="display:' + (open ? 'block' : 'none') + '">' +
+        '<div class="comment-list">' + (list || '<div class="comment-empty">Няма коментари.</div>') + '</div>' +
+        '<div class="comment-add">' +
+          '<input type="text" class="comment-input" data-task="' + esc(t.id) + '" placeholder="Коментар...">' +
+          '<button class="btn-ghost comment-send" data-task="' + esc(t.id) + '">Изпрати</button>' +
+        '</div>' +
+      '</div>';
+    }
+
+    function commentToggleBtn(t) {
+      const n = (t.comments || []).length;
+      return '<button class="btn-ghost comment-toggle" data-toggle="' + esc(t.id) + '">💬 ' + n + '</button>';
+    }
+
+    function renderList(elId, rows, emptyMsg) {
+      const el = document.getElementById(elId);
       if (!rows || !rows.length) {
-        el.innerHTML = '<div class="empty">Нямаш активни задачи в момента.</div>';
+        el.innerHTML = '<div class="empty">' + emptyMsg + '</div>';
         return;
       }
       el.innerHTML = '<ul class="tasks">' + rows.map(function (t) {
-        return '<li><span class="task-text">' + esc(t.text) + '</span></li>';
+        return '<li data-id="' + esc(t.id) + '"><div class="task-row">' +
+          '<span class="task-text">' + esc(t.text) + '</span>' +
+          commentToggleBtn(t) +
+          '</div>' + commentsHtml(t) + '</li>';
       }).join('') + '</ul>';
+      attachCommentHandlers(el);
+    }
+
+    function attachCommentHandlers(scope) {
+      scope.querySelectorAll('[data-toggle]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const id = btn.getAttribute('data-toggle');
+          if (openComments.has(id)) openComments.delete(id); else openComments.add(id);
+          render(tasksData, pendingData, document.getElementById('nameHeader').textContent);
+        });
+      });
+      scope.querySelectorAll('.comment-send').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const id = btn.getAttribute('data-task');
+          const input = scope.querySelector('.comment-input[data-task="' + CSS.escape(id) + '"]');
+          const text = input.value.trim();
+          if (!text) return;
+          addComment(id, text);
+        });
+      });
+    }
+
+    function render(rows, pending, name) {
+      if (name) document.getElementById('nameHeader').textContent = name;
+      renderList('list', rows, 'Нямаш активни задачи в момента.');
+      renderList('pendingList', pending, 'Нямаш непотвърдени задачи в момента.');
     }
 
     async function refresh() {
       if (!u) {
         document.getElementById('list').innerHTML = '<div class="empty">Липсва личен код в адреса.</div>';
+        document.getElementById('pendingList').innerHTML = '';
         return;
       }
       try {
-        const res = await fetch(API_URL + '?action=tasks&u=' + encodeURIComponent(u));
+        const res = await fetch(API_URL + '?action=tasks&u=' + encodeURIComponent(u) + '&board=' + encodeURIComponent(board));
         const data = await res.json();
         if (data.ok === false) {
           document.getElementById('list').innerHTML = '<div class="empty">' + esc(data.error || 'Грешка.') + '</div>';
+          document.getElementById('pendingList').innerHTML = '';
           return;
         }
-        render(data.tasks, data.name);
+        tasksData = data.tasks || [];
+        pendingData = data.pendingTasks || [];
+        render(tasksData, pendingData, data.name);
       } catch (err) {
         document.getElementById('list').innerHTML = '<div class="empty">Грешка при връзка със сървъра.</div>';
       }
     }
 
+    async function addTask() {
+      const text = document.getElementById('newTaskText').value.trim();
+      if (!text || !u) return;
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'personAddTask', u: u, board: board, text: text })
+        });
+        const data = await res.json();
+        if (data.ok === false) { alert('Грешка: ' + data.error); return; }
+        tasksData = data.tasks || [];
+        pendingData = data.pendingTasks || [];
+        render(tasksData, pendingData, data.name);
+        document.getElementById('newTaskText').value = '';
+      } catch (err) {
+        alert('Грешка при връзка със сървъра.');
+      }
+    }
+
+    async function addComment(taskId, text) {
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'addComment', u: u, board: board, taskId: taskId, text: text })
+        });
+        const data = await res.json();
+        if (data.ok === false) { alert('Грешка: ' + data.error); return; }
+        openComments.add(taskId);
+        tasksData = data.tasks || [];
+        pendingData = data.pendingTasks || [];
+        render(tasksData, pendingData, data.name);
+      } catch (err) {
+        alert('Грешка при връзка със сървъра.');
+      }
+    }
+
+    document.getElementById('addBtn').addEventListener('click', addTask);
     refresh();
     setInterval(refresh, 15000);
     document.addEventListener('visibilitychange', function () {
