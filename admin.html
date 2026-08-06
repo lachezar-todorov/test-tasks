@@ -63,7 +63,9 @@
     function isUnread(c) { return c.author !== 'Админ' && !seenComments.has(c.id); }
     function taskSignature(t) { return (t.comments || []).map(function (c) { return c.id + ':' + c.date; }).join('|'); }
     function isTaskUnread(t) {
-      return (t.comments || []).some(isUnread) && seenTasks[t.id] !== taskSignature(t);
+      const neverOpened = !(t.id in seenTasks);
+      const hasNewComments = (t.comments || []).some(isUnread) && seenTasks[t.id] !== taskSignature(t);
+      return neverOpened || hasNewComments;
     }
     function markTaskOpened(t) {
       seenTasks[t.id] = taskSignature(t);
@@ -141,8 +143,13 @@
       return '<button class="btn-ghost comment-toggle' + (unread ? ' comment-toggle-unread' : '') + '" data-toggle="' + esc(t.id) + '">💬 ' + n + '</button>';
     }
 
-    function taskTextHtml(t, extraCls) {
-      const unread = isTaskUnread(t);
+    // fullCheck=true (само "Чакат одобрение"): удебелява и чисто нова задача
+    // без нито един коментар — админът трябва да забележи нови предложения.
+    // fullCheck=false/липсва (Активни/Изпълнени): удебелява само ако има
+    // непрочетен коментар — безсмислено е задача, добавена от самия админ,
+    // да излиза "нова" за него.
+    function taskTextHtml(t, extraCls, fullCheck) {
+      const unread = fullCheck ? isTaskUnread(t) : (t.comments || []).some(isUnread);
       const cls = 'task-text' + (extraCls ? ' ' + extraCls : '') + (unread ? ' task-text-unread' : '');
       return '<span class="' + cls + '">' + (unread ? '<span class="unread-dot"></span>' : '') + esc(t.text) + '</span>';
     }
@@ -172,7 +179,7 @@
           g.map[name].forEach(function (t) {
             html += '<li data-id="' + esc(t.id) + '"><div class="task-row">' +
               '<span class="badge-pending">Чака</span>' +
-              taskTextHtml(t) +
+              taskTextHtml(t, null, true) +
               commentToggleBtn(t) +
               '<button class="btn-primary" data-approve="' + esc(t.id) + '">Одобри</button>' +
               '<button class="btn-ghost" data-del="' + esc(t.id) + '">Отхвърли</button>' +
@@ -346,7 +353,10 @@
       try {
         const res = await apiPost('addTask', { text: text, assignee: who });
         if (res.ok === false) { onError({ message: res.error }); return; }
-        data = res.tasks; render();
+        data = res.tasks;
+        const created = data.find(function (t) { return t.text === text && t.assignee === who; });
+        if (created) markTaskOpened(created);
+        render();
         document.getElementById('newTaskText').value = '';
       } catch (err) { onError(err); }
     }
@@ -364,7 +374,10 @@
       try {
         const res = await apiPost('approveTask', { id: id });
         if (res.ok === false) { onError({ message: res.error }); return; }
-        data = res.tasks; render();
+        data = res.tasks;
+        const approved = data.find(function (t) { return t.id === id; });
+        if (approved) markTaskOpened(approved);
+        render();
       } catch (err) { onError(err); }
     }
 
