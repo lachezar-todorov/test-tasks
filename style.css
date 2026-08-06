@@ -5,6 +5,7 @@
   --shadow-sm:0 1px 3px rgba(20,27,34,.08);
   --radius:12px;
   --brand-orange:#d96b3f; --brand-orange-dark:#b8532c; --brand-cream:#fbeae0; --brand-muted:#8a7d72;
+  --unread-green:#2e9e5b; --unread-green-soft:#e6f7ec;
 }
 *{box-sizing:border-box;}
 body{
@@ -80,6 +81,8 @@ ul.tasks li:hover{background:#fafaf6;}
 .group-name{padding:10px 18px 6px;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--teal-dark);background:#f7f5ee;border-top:1px solid var(--line);}
 .task-text{flex:1 1 140px;min-width:0;font-size:15px;}
 .task-text-done{text-decoration:line-through;color:var(--muted);}
+.task-text-unread{font-weight:700;}
+.unread-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--unread-green);margin-right:2px;flex-shrink:0;vertical-align:middle;}
 .empty{padding:24px 18px;color:var(--muted);font-style:italic;font-size:14px;}
 .footer-row{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:#fbfaf5;border-top:1px solid var(--line);gap:10px;flex-wrap:wrap;}
 .footer-row .count{font-size:12px;color:var(--muted);}
@@ -103,17 +106,23 @@ ul.tasks li:hover{background:#fafaf6;}
 /* --- коментари --- */
 .comment-toggle{background:transparent;color:var(--teal-dark);padding:5px 9px;font-weight:500;font-size:12px;}
 .comment-toggle:hover{background:var(--teal-soft);}
+.comment-toggle-unread{background:var(--unread-green);color:#fff;font-weight:700;}
+.comment-toggle-unread:hover{background:#237a48;}
 .comments{width:100%;background:#f7f5ee;border-top:1px dashed var(--line);padding:12px;margin-top:6px;border-radius:8px;}
 .comment-list{display:flex;flex-direction:column;gap:8px;margin-bottom:10px;}
-.comment{font-size:13px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:7px 11px;border-left:3px solid var(--line);}
+.comment{font-size:13px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:7px 11px;border-left:3px solid var(--line);transition:background .3s, border-color .3s;}
 .comment-admin{border-left-color:var(--teal);}
 .comment-person{border-left-color:var(--amber);}
+.comment-unread{background:var(--unread-green-soft);border-left-color:var(--unread-green);cursor:pointer;}
 .comment b{color:var(--teal-dark);}
+.comment-unread-badge{background:var(--unread-green);color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:.03em;margin-left:6px;}
 .comment-date{color:var(--muted);font-size:11px;margin-left:6px;}
 .comment-text{margin-top:2px;line-height:1.4;display:flex;align-items:flex-start;gap:8px;}
 .comment-text-value{flex:1;}
-.comment-edit-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0;}
+.comment-actions{display:flex;gap:4px;flex-shrink:0;}
+.comment-edit-btn,.comment-delete-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0;}
 .comment-edit-btn:hover{color:var(--teal-dark);}
+.comment-delete-btn:hover{color:var(--red);}
 .comment-edit-row{display:flex;gap:6px;margin-top:2px;flex-wrap:wrap;}
 .comment-edit-row input[type=text]{flex:1 1 160px;padding:6px 8px;font-size:13px;}
 .comment-empty{color:var(--muted);font-size:12px;font-style:italic;}
