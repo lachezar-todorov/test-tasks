@@ -108,6 +108,8 @@ ul.tasks li:hover{background:#fafaf6;}
 .comment-toggle:hover{background:var(--teal-soft);}
 .comment-toggle-unread{background:var(--unread-green);color:#fff;font-weight:700;}
 .comment-toggle-unread:hover{background:#237a48;}
+.mark-read-btn{background:var(--unread-green-soft);color:var(--unread-green);border:1px solid var(--unread-green);font-weight:600;font-size:12px;padding:5px 9px;}
+.mark-read-btn:hover{background:var(--unread-green);color:#fff;}
 .comments{width:100%;background:#f7f5ee;border-top:1px dashed var(--line);padding:12px;margin-top:6px;border-radius:8px;}
 .comment-list{display:flex;flex-direction:column;gap:8px;margin-bottom:10px;}
 .comment{font-size:13px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:7px 11px;border-left:3px solid var(--line);transition:background .3s, border-color .3s;}
