@@ -46,6 +46,34 @@
     const openComments = new Set();
     const commentDrafts = {};
 
+    // Две отделни нива на "прочетено": ниво коментар (всеки коментар поотделно,
+    // маркира се само като се кликне direktно върху него) и ниво задача (само
+    // "новото" на самата задача — маха се щом отвориш панела ѝ, но се връща
+    // автоматично щом дойде нов/редактиран коментар, защото се пази заедно с
+    // "отпечатък" на текущите коментари, а не просто дали някога е бил отварян).
+    const SEEN_COMMENTS_KEY = 'seenComments_admin';
+    const SEEN_TASKS_KEY = 'seenTasks_admin';
+    let seenComments, seenTasks;
+    try { seenComments = new Set(JSON.parse(localStorage.getItem(SEEN_COMMENTS_KEY) || '[]')); }
+    catch (e) { seenComments = new Set(); }
+    try { seenTasks = JSON.parse(localStorage.getItem(SEEN_TASKS_KEY) || '{}'); }
+    catch (e) { seenTasks = {}; }
+    function saveSeenComments() { localStorage.setItem(SEEN_COMMENTS_KEY, JSON.stringify(Array.from(seenComments))); }
+    function saveSeenTasks() { localStorage.setItem(SEEN_TASKS_KEY, JSON.stringify(seenTasks)); }
+    function isUnread(c) { return c.author !== 'Админ' && !seenComments.has(c.id); }
+    function taskSignature(t) { return (t.comments || []).map(function (c) { return c.id + ':' + c.date; }).join('|'); }
+    function isTaskUnread(t) {
+      return (t.comments || []).some(isUnread) && seenTasks[t.id] !== taskSignature(t);
+    }
+    function markTaskOpened(t) {
+      seenTasks[t.id] = taskSignature(t);
+      saveSeenTasks();
+    }
+    function markCommentSeen(id) {
+      seenComments.add(id);
+      saveSeenComments();
+    }
+
     function esc(s) {
       return String(s).replace(/[&<>"']/g, function (c) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -82,14 +110,20 @@
     function commentsHtml(t) {
       const open = openComments.has(t.id);
       const list = (t.comments || []).map(function (c) {
-        const cls = c.author === 'Админ' ? 'comment comment-admin' : 'comment comment-person';
+        const unread = isUnread(c);
+        const cls = 'comment ' + (c.author === 'Админ' ? 'comment-admin' : 'comment-person') + (unread ? ' comment-unread' : '');
         const body = c.id === editingCommentId
           ? '<div class="comment-edit-row"><input type="text" class="comment-edit-text" value="' + esc(c.text) + '">' +
             '<button class="btn-primary comment-edit-save" data-comment="' + esc(c.id) + '">Запази</button>' +
             '<button class="btn-ghost comment-edit-cancel" data-comment="' + esc(c.id) + '">Отказ</button></div>'
           : '<div class="comment-text"><span class="comment-text-value">' + esc(c.text) + '</span>' +
-            '<button class="comment-edit-btn" data-comment="' + esc(c.id) + '" title="Редактирай">✎</button></div>';
-        return '<div class="' + cls + '"><b>' + esc(c.author) + '</b><span class="comment-date">' + esc(c.date) + '</span>' + body + '</div>';
+            '<div class="comment-actions">' +
+              '<button class="comment-edit-btn" data-comment="' + esc(c.id) + '" title="Редактирай">✎</button>' +
+              '<button class="comment-delete-btn" data-comment="' + esc(c.id) + '" title="Изтрий">🗑</button>' +
+            '</div></div>';
+        return '<div class="' + cls + '" data-comment-id="' + esc(c.id) + '" title="' + (unread ? 'Кликни за прочетено' : '') + '">' +
+          '<b>' + esc(c.author) + '</b><span class="comment-date">' + esc(c.date) + '</span>' +
+          (unread ? '<span class="comment-unread-badge">Ново</span>' : '') + body + '</div>';
       }).join('');
       const draft = commentDrafts[t.id] || '';
       return '<div class="comments" id="comments-' + esc(t.id) + '" style="display:' + (open ? 'block' : 'none') + '">' +
@@ -103,7 +137,14 @@
 
     function commentToggleBtn(t) {
       const n = (t.comments || []).length;
-      return '<button class="btn-ghost comment-toggle" data-toggle="' + esc(t.id) + '">💬 ' + n + '</button>';
+      const unread = (t.comments || []).some(isUnread);
+      return '<button class="btn-ghost comment-toggle' + (unread ? ' comment-toggle-unread' : '') + '" data-toggle="' + esc(t.id) + '">💬 ' + n + '</button>';
+    }
+
+    function taskTextHtml(t, extraCls) {
+      const unread = isTaskUnread(t);
+      const cls = 'task-text' + (extraCls ? ' ' + extraCls : '') + (unread ? ' task-text-unread' : '');
+      return '<span class="' + cls + '">' + (unread ? '<span class="unread-dot"></span>' : '') + esc(t.text) + '</span>';
     }
 
     function editRowHtml(t) {
@@ -131,7 +172,7 @@
           g.map[name].forEach(function (t) {
             html += '<li data-id="' + esc(t.id) + '"><div class="task-row">' +
               '<span class="badge-pending">Чака</span>' +
-              '<span class="task-text">' + esc(t.text) + '</span>' +
+              taskTextHtml(t) +
               commentToggleBtn(t) +
               '<button class="btn-primary" data-approve="' + esc(t.id) + '">Одобри</button>' +
               '<button class="btn-ghost" data-del="' + esc(t.id) + '">Отхвърли</button>' +
@@ -155,7 +196,7 @@
           g.map[name].forEach(function (t) {
             const row = t.id === editingId ? editRowHtml(t) :
               '<input type="checkbox" class="chk" data-id="' + esc(t.id) + '">' +
-              '<span class="task-text">' + esc(t.text) + '</span>' +
+              taskTextHtml(t) +
               commentToggleBtn(t) +
               '<button class="btn-ghost" data-edit="' + esc(t.id) + '">✎</button>' +
               '<button class="btn-ghost" data-del="' + esc(t.id) + '">✕</button>';
@@ -176,7 +217,7 @@
         html += '<ul class="tasks">' + done.map(function (t) {
           return '<li data-id="' + esc(t.id) + '"><div class="task-row">' +
             '<input type="checkbox" class="chk" checked data-id="' + esc(t.id) + '">' +
-            '<span class="task-text task-text-done">' + esc(t.text) + '</span>' +
+            taskTextHtml(t, 'task-text-done') +
             '<span class="task-assignee">' + esc(t.assignee) + '</span>' +
             commentToggleBtn(t) +
             '</div>' + commentsHtml(t) + '</li>';
@@ -217,7 +258,20 @@
       document.querySelectorAll('[data-toggle]').forEach(function (btn) {
         btn.addEventListener('click', function () {
           const id = btn.getAttribute('data-toggle');
-          if (openComments.has(id)) openComments.delete(id); else openComments.add(id);
+          if (openComments.has(id)) {
+            openComments.delete(id);
+          } else {
+            openComments.add(id);
+            const t = data.find(function (x) { return x.id === id; });
+            if (t) markTaskOpened(t);
+          }
+          render();
+        });
+      });
+      document.querySelectorAll('.comment[data-comment-id]').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+          if (e.target.closest('button, input')) return;
+          markCommentSeen(el.getAttribute('data-comment-id'));
           render();
         });
       });
@@ -236,7 +290,11 @@
         });
       });
       document.querySelectorAll('.comment-edit-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () { editingCommentId = btn.getAttribute('data-comment'); render(); });
+        btn.addEventListener('click', function () {
+          editingCommentId = btn.getAttribute('data-comment');
+          markCommentSeen(editingCommentId);
+          render();
+        });
       });
       document.querySelectorAll('.comment-edit-cancel').forEach(function (btn) {
         btn.addEventListener('click', function () { editingCommentId = null; render(); });
@@ -247,6 +305,12 @@
           const text = wrap.querySelector('.comment-edit-text').value.trim();
           if (!text) return;
           editComment(btn.getAttribute('data-comment'), text);
+        });
+      });
+      document.querySelectorAll('.comment-delete-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          if (!confirm('Да изтрия ли този коментар?')) return;
+          deleteComment(btn.getAttribute('data-comment'));
         });
       });
       const closeBtn = document.getElementById('closeDayBtn');
@@ -336,6 +400,14 @@
         const res = await apiPost('editComment', { commentId: commentId, text: text });
         if (res.ok === false) { onError({ message: res.error }); return; }
         editingCommentId = null;
+        data = res.tasks; render();
+      } catch (err) { onError(err); }
+    }
+
+    async function deleteComment(commentId) {
+      try {
+        const res = await apiPost('deleteComment', { commentId: commentId });
+        if (res.ok === false) { onError({ message: res.error }); return; }
         data = res.tasks; render();
       } catch (err) { onError(err); }
     }
