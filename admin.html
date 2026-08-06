@@ -154,6 +154,13 @@
       return '<span class="' + cls + '">' + (unread ? '<span class="unread-dot"></span>' : '') + esc(t.text) + '</span>';
     }
 
+    // Само за "Чакат одобрение" — маркира самата задача като видяна, без да
+    // се налага да отваряш (евентуално празния) панел с коментари за да го направиш.
+    function markReadBtnHtml(t) {
+      if (!isTaskUnread(t)) return '';
+      return '<button class="btn-ghost mark-read-btn" data-mark-read="' + esc(t.id) + '" title="Маркирай задачата като прочетена">✓ Прочетено</button>';
+    }
+
     function editRowHtml(t) {
       return '<div class="edit-row">' +
         '<input type="text" class="edit-text" value="' + esc(t.text) + '">' +
@@ -180,6 +187,7 @@
             html += '<li data-id="' + esc(t.id) + '"><div class="task-row">' +
               '<span class="badge-pending">Чака</span>' +
               taskTextHtml(t, null, true) +
+              markReadBtnHtml(t) +
               commentToggleBtn(t) +
               '<button class="btn-primary" data-approve="' + esc(t.id) + '">Одобри</button>' +
               '<button class="btn-ghost" data-del="' + esc(t.id) + '">Отхвърли</button>' +
@@ -272,6 +280,14 @@
             const t = data.find(function (x) { return x.id === id; });
             if (t) markTaskOpened(t);
           }
+          render();
+        });
+      });
+      document.querySelectorAll('[data-mark-read]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const id = btn.getAttribute('data-mark-read');
+          const t = data.find(function (x) { return x.id === id; });
+          if (t) markTaskOpened(t);
           render();
         });
       });
