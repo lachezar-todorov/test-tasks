@@ -175,12 +175,20 @@
         });
       });
       scope.querySelectorAll('.comment-send').forEach(function (btn) {
-        btn.addEventListener('click', function () {
+        btn.addEventListener('click', async function () {
           const id = btn.getAttribute('data-task');
           const input = scope.querySelector('.comment-input[data-task="' + CSS.escape(id) + '"]');
           const text = input.value.trim();
           if (!text) return;
-          addComment(id, text);
+          btn.disabled = true;
+          btn.textContent = 'Изпраща се...';
+          input.disabled = true;
+          await addComment(id, text);
+          if (document.body.contains(btn)) {
+            btn.disabled = false;
+            btn.textContent = 'Изпрати';
+            input.disabled = false;
+          }
         });
       });
       scope.querySelectorAll('.comment-edit-btn').forEach(function (btn) {
@@ -312,13 +320,22 @@
       }
     }
 
-    document.getElementById('addBtn').addEventListener('click', addTask);
+    document.getElementById('addBtn').addEventListener('click', async function () {
+      const btn = document.getElementById('addBtn');
+      const input = document.getElementById('newTaskText');
+      btn.disabled = true;
+      btn.textContent = 'Добавя се...';
+      input.disabled = true;
+      await addTask();
+      btn.disabled = false;
+      btn.textContent = 'Добави';
+      input.disabled = false;
+    });
     refresh();
-    setInterval(function () { if (!editingCommentId) refresh(); }, 45000);
+    setInterval(function () { if (!editingCommentId) refresh(); }, 15000);
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible' && !editingCommentId) refresh();
     });
   </script>
 </body>
 </html>
-
