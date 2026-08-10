@@ -15,6 +15,7 @@
     <p class="sub-note">Списъкът се обновява автоматично. Най-новите задачи са отгоре.</p>
     <div class="propose-row">
       <input type="text" id="newTaskText" placeholder="Предложи си задача...">
+      <select id="newTaskProject"></select>
       <label class="important-check"><input type="checkbox" id="newTaskImportant"> Важна</label>
       <button class="btn-primary" id="addBtn">Добави</button>
     </div>
@@ -29,6 +30,19 @@
 
   <script src="config.js"></script>
   <script>
+    const PROJECTS = [
+      'Холидей парк, гр. Русе',
+      'Дом за възрастни хора, гр. Момин проход',
+      'Холидей парк, Симеоново',
+      'Алумакс',
+      'Биотрейд',
+      'Белисимо',
+      'Ресторант Шамот',
+      'Здравко Здравков',
+      'Технополис, гр. Монтана',
+      'Младен, с. Лозен'
+    ];
+
     const params = new URLSearchParams(location.search);
     const u = params.get('u');
     const openComments = new Set();
@@ -113,6 +127,16 @@
       return '<button class="btn-ghost comment-toggle' + (unread ? ' comment-toggle-unread' : '') + '" data-toggle="' + esc(t.id) + '">💬 ' + n + '</button>';
     }
 
+    function projectOptions() {
+      return '<option value="">— без проект —</option>' + PROJECTS.map(function (p) {
+        return '<option value="' + esc(p) + '">' + esc(p) + '</option>';
+      }).join('');
+    }
+
+    function projectBadge(t) {
+      return t.project ? '<span class="badge-project">' + esc(t.project) + '</span>' : '';
+    }
+
     function taskTextHtml(t) {
       const unread = isTaskUnread(t);
       return '<span class="task-text' + (unread ? ' task-text-unread' : '') + '">' +
@@ -135,6 +159,7 @@
       el.innerHTML = '<ul class="tasks">' + rows.map(function (t) {
         return '<li class="' + (t.important ? 'important-row' : '') + '" data-id="' + esc(t.id) + '"><div class="task-row">' +
           (t.important ? '<span class="badge-important">Важна</span>' : '') +
+          projectBadge(t) +
           taskTextHtml(t) +
           markReadBtnHtml(t) +
           commentToggleBtn(t) +
@@ -267,10 +292,11 @@
       const text = document.getElementById('newTaskText').value.trim();
       if (!text || !u) return;
       const important = document.getElementById('newTaskImportant').checked;
+      const project = document.getElementById('newTaskProject').value;
       try {
         const res = await fetch(API_URL, {
           method: 'POST',
-          body: JSON.stringify({ action: 'personAddTask', u: u, text: text, important: important })
+          body: JSON.stringify({ action: 'personAddTask', u: u, text: text, important: important, project: project })
         });
         const data = await res.json();
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
@@ -279,6 +305,7 @@
         applyData(data);
         document.getElementById('newTaskText').value = '';
         document.getElementById('newTaskImportant').checked = false;
+        document.getElementById('newTaskProject').value = '';
       } catch (err) {
         alert('Грешка при връзка със сървъра.');
       }
@@ -329,19 +356,23 @@
       }
     }
 
+    document.getElementById('newTaskProject').innerHTML = projectOptions();
     document.getElementById('addBtn').addEventListener('click', async function () {
       const btn = document.getElementById('addBtn');
       const input = document.getElementById('newTaskText');
       const importantCb = document.getElementById('newTaskImportant');
+      const projectSelect = document.getElementById('newTaskProject');
       btn.disabled = true;
       btn.textContent = 'Добавя се...';
       input.disabled = true;
       importantCb.disabled = true;
+      projectSelect.disabled = true;
       await addTask();
       btn.disabled = false;
       btn.textContent = 'Добави';
       input.disabled = false;
       importantCb.disabled = false;
+      projectSelect.disabled = false;
     });
     refresh();
     setInterval(function () { if (!editingCommentId) refresh(); }, 15000);
