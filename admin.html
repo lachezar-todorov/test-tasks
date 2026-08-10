@@ -335,10 +335,9 @@
       if (sortBy === 'assignee') {
         copy.sort(function (a, b) { return a.assignee.localeCompare(b.assignee, 'bg'); });
       } else if (sortBy === 'status') {
-        const order = { 'Чака одобрение': 0, 'Активна': 1, 'Изпълнена': 2 };
-        copy.sort(function (a, b) {
-          return (order[a.status] !== undefined ? order[a.status] : 3) - (order[b.status] !== undefined ? order[b.status] : 3);
-        });
+        const order = { 'Чака одобрение': 1, 'Активна': 2, 'Изпълнена': 3 };
+        const tier = function (t) { return t.important ? 0 : (order[t.status] !== undefined ? order[t.status] : 4); };
+        copy.sort(function (a, b) { return tier(a) - tier(b); });
       }
       // 'activity' (по подразбиране) — реда, в който сървърът вече ги връща (по последна активност)
       return copy;
