@@ -41,6 +41,7 @@
     if (!pin) { location.href = 'index.html'; }
 
     let data = [];
+    let lastSnapshot = null;
     let editingId = null;
     let editingCommentId = null;
     const openComments = new Set();
@@ -390,6 +391,16 @@
       if (closeBtn) closeBtn.addEventListener('click', closeDay);
     }
 
+    // Прилага нов отговор от сървъра и опреснява екрана. Използвай това
+    // (вместо direktно "data = res.tasks; render();") при всяко действие,
+    // за да остане "тихият" refresh() в синхрон и да не решава погрешно,
+    // че нещо ново се е случило.
+    function applyData(res) {
+      data = res.tasks || [];
+      lastSnapshot = JSON.stringify(data);
+      render();
+    }
+
     function render() {
       if (!Array.isArray(data)) {
         document.getElementById('approvalCard').innerHTML = '';
@@ -407,8 +418,9 @@
       try {
         const res = await apiGet('tasks');
         if (res.ok === false) { onError({ message: res.error }); return; }
-        data = res.tasks || [];
-        render();
+        const snapshot = JSON.stringify(res.tasks || []);
+        if (snapshot === lastSnapshot) return; // нищо ново — не пипаме екрана (за да не скача курсорът в коментар/поле)
+        applyData(res);
       } catch (err) { onError(err); }
     }
 
@@ -419,10 +431,9 @@
       try {
         const res = await apiPost('addTask', { text: text, assignee: who });
         if (res.ok === false) { onError({ message: res.error }); return; }
-        data = res.tasks;
-        const created = data.find(function (t) { return t.text === text && t.assignee === who; });
+        const created = (res.tasks || []).find(function (t) { return t.text === text && t.assignee === who; });
         if (created) markTaskOpened(created);
-        render();
+        applyData(res);
         document.getElementById('newTaskText').value = '';
       } catch (err) { onError(err); }
     }
@@ -432,7 +443,7 @@
         const res = await apiPost('editTask', { id: id, text: text, assignee: assignee });
         if (res.ok === false) { onError({ message: res.error }); return; }
         editingId = null;
-        data = res.tasks; render();
+        applyData(res);
       } catch (err) { onError(err); }
     }
 
@@ -440,10 +451,9 @@
       try {
         const res = await apiPost('approveTask', { id: id });
         if (res.ok === false) { onError({ message: res.error }); return; }
-        data = res.tasks;
-        const approved = data.find(function (t) { return t.id === id; });
+        const approved = (res.tasks || []).find(function (t) { return t.id === id; });
         if (approved) markTaskOpened(approved);
-        render();
+        applyData(res);
       } catch (err) { onError(err); }
     }
 
@@ -451,7 +461,7 @@
       try {
         const res = await apiPost('toggleTask', { id: id, done: checked });
         if (res.ok === false) { onError({ message: res.error }); return; }
-        data = res.tasks; render();
+        applyData(res);
       } catch (err) { onError(err); }
     }
 
@@ -460,7 +470,7 @@
       try {
         const res = await apiPost('deleteTask', { id: id });
         if (res.ok === false) { onError({ message: res.error }); return; }
-        data = res.tasks; render();
+        applyData(res);
       } catch (err) { onError(err); }
     }
 
@@ -470,7 +480,7 @@
         if (res.ok === false) { onError({ message: res.error }); return; }
         delete commentDrafts[taskId];
         openComments.add(taskId);
-        data = res.tasks; render();
+        applyData(res);
       } catch (err) { onError(err); }
     }
 
@@ -479,7 +489,7 @@
         const res = await apiPost('editComment', { commentId: commentId, text: text });
         if (res.ok === false) { onError({ message: res.error }); return; }
         editingCommentId = null;
-        data = res.tasks; render();
+        applyData(res);
       } catch (err) { onError(err); }
     }
 
@@ -487,7 +497,7 @@
       try {
         const res = await apiPost('deleteComment', { commentId: commentId });
         if (res.ok === false) { onError({ message: res.error }); return; }
-        data = res.tasks; render();
+        applyData(res);
       } catch (err) { onError(err); }
     }
 
@@ -496,7 +506,7 @@
       try {
         const res = await apiPost('closeDay', {});
         if (res.ok === false) { onError({ message: res.error }); return; }
-        data = res.tasks; render();
+        applyData(res);
       } catch (err) { onError(err); }
     }
 
@@ -535,7 +545,7 @@
     refresh();
 
     // автоматично опресняване — не пипа задача/коментар, който в момента се редактира
-    setInterval(function () { if (!editingId && !editingCommentId) refresh(); }, 45000);
+    setInterval(function () { if (!editingId && !editingCommentId) refresh(); }, 15000);
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible' && !editingId && !editingCommentId) refresh();
     });
