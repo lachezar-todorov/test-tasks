@@ -535,7 +535,7 @@
     refresh();
 
     // автоматично опресняване — не пипа задача/коментар, който в момента се редактира
-    setInterval(function () { if (!editingId && !editingCommentId) refresh(); }, 15000);
+    setInterval(function () { if (!editingId && !editingCommentId) refresh(); }, 45000);
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible' && !editingId && !editingCommentId) refresh();
     });
