@@ -137,3 +137,11 @@ ul.tasks li:hover{background:#fafaf6;}
 .pending-card h2{color:var(--amber);}
 .propose-row{display:flex;gap:8px;padding:16px 20px;flex-wrap:wrap;}
 .propose-row input[type=text]{flex:1 1 220px;}
+
+/* --- важни задачи --- */
+.important-card h2{color:var(--red);}
+.important-row{background:#fdf4f3;}
+.important-row:hover{background:#fbe9e7;}
+.badge-important{background:#f6dcd8;color:var(--red);font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0;}
+.important-check{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);flex-shrink:0;cursor:pointer;}
+.important-check input{cursor:pointer;}
