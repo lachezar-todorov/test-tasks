@@ -15,6 +15,7 @@
     <p class="sub-note">Списъкът се обновява автоматично. Най-новите задачи са отгоре.</p>
     <div class="propose-row">
       <input type="text" id="newTaskText" placeholder="Предложи си задача...">
+      <label class="important-check"><input type="checkbox" id="newTaskImportant"> Важна</label>
       <button class="btn-primary" id="addBtn">Добави</button>
     </div>
     <div id="list"><div class="empty">Зареждане...</div></div>
@@ -132,7 +133,8 @@
         return;
       }
       el.innerHTML = '<ul class="tasks">' + rows.map(function (t) {
-        return '<li data-id="' + esc(t.id) + '"><div class="task-row">' +
+        return '<li class="' + (t.important ? 'important-row' : '') + '" data-id="' + esc(t.id) + '"><div class="task-row">' +
+          (t.important ? '<span class="badge-important">Важна</span>' : '') +
           taskTextHtml(t) +
           markReadBtnHtml(t) +
           commentToggleBtn(t) +
@@ -223,7 +225,9 @@
 
     function render(rows, pending, name) {
       if (name) { document.getElementById('nameHeader').textContent = name; myName = name; }
-      renderList('list', rows, 'Нямаш активни задачи в момента.');
+      // важните задачи излизат отгоре, независимо от реда по активност
+      const sorted = (rows || []).slice().sort(function (a, b) { return (b.important ? 1 : 0) - (a.important ? 1 : 0); });
+      renderList('list', sorted, 'Нямаш активни задачи в момента.');
       renderList('pendingList', pending, 'Нямаш непотвърдени задачи в момента.');
     }
 
@@ -262,10 +266,11 @@
     async function addTask() {
       const text = document.getElementById('newTaskText').value.trim();
       if (!text || !u) return;
+      const important = document.getElementById('newTaskImportant').checked;
       try {
         const res = await fetch(API_URL, {
           method: 'POST',
-          body: JSON.stringify({ action: 'personAddTask', u: u, text: text })
+          body: JSON.stringify({ action: 'personAddTask', u: u, text: text, important: important })
         });
         const data = await res.json();
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
@@ -273,6 +278,7 @@
         if (created) markTaskOpened(created);
         applyData(data);
         document.getElementById('newTaskText').value = '';
+        document.getElementById('newTaskImportant').checked = false;
       } catch (err) {
         alert('Грешка при връзка със сървъра.');
       }
@@ -326,13 +332,16 @@
     document.getElementById('addBtn').addEventListener('click', async function () {
       const btn = document.getElementById('addBtn');
       const input = document.getElementById('newTaskText');
+      const importantCb = document.getElementById('newTaskImportant');
       btn.disabled = true;
       btn.textContent = 'Добавя се...';
       input.disabled = true;
+      importantCb.disabled = true;
       await addTask();
       btn.disabled = false;
       btn.textContent = 'Добави';
       input.disabled = false;
+      importantCb.disabled = false;
     });
     refresh();
     setInterval(function () { if (!editingCommentId) refresh(); }, 15000);
