@@ -332,7 +332,7 @@
       input.disabled = false;
     });
     refresh();
-    setInterval(function () { if (!editingCommentId) refresh(); }, 15000);
+    setInterval(function () { if (!editingCommentId) refresh(); }, 45000);
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible' && !editingCommentId) refresh();
     });
