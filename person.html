@@ -36,6 +36,7 @@
     let tasksData = [];
     let pendingData = [];
     let myName = '';
+    let lastSnapshot = null;
 
     // Две отделни нива на "прочетено": ниво коментар (маркира се само с клик
     // direktно върху него) и ниво задача (само "новото" на задачата — маха се
@@ -226,6 +227,16 @@
       renderList('pendingList', pending, 'Нямаш непотвърдени задачи в момента.');
     }
 
+    // Прилага нов отговор от сървъра. Използвай това (вместо direktно
+    // задаване на tasksData/pendingData + render()) при всяко действие,
+    // за да остане "тихият" refresh() в синхрон.
+    function applyData(payload) {
+      tasksData = payload.tasks || [];
+      pendingData = payload.pendingTasks || [];
+      lastSnapshot = JSON.stringify({ t: tasksData, p: pendingData });
+      render(tasksData, pendingData, payload.name);
+    }
+
     async function refresh() {
       if (!u) {
         document.getElementById('list').innerHTML = '<div class="empty">Липсва личен код в адреса.</div>';
@@ -240,9 +251,9 @@
           document.getElementById('pendingList').innerHTML = '';
           return;
         }
-        tasksData = data.tasks || [];
-        pendingData = data.pendingTasks || [];
-        render(tasksData, pendingData, data.name);
+        const snapshot = JSON.stringify({ t: data.tasks || [], p: data.pendingTasks || [] });
+        if (snapshot === lastSnapshot) return; // нищо ново — не пипаме екрана (за да не скача курсорът в коментар/поле)
+        applyData(data);
       } catch (err) {
         document.getElementById('list').innerHTML = '<div class="empty">Грешка при връзка със сървъра.</div>';
       }
@@ -258,11 +269,9 @@
         });
         const data = await res.json();
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
-        tasksData = data.tasks || [];
-        pendingData = data.pendingTasks || [];
-        const created = pendingData.find(function (t) { return t.text === text; });
+        const created = (data.pendingTasks || []).find(function (t) { return t.text === text; });
         if (created) markTaskOpened(created);
-        render(tasksData, pendingData, data.name);
+        applyData(data);
         document.getElementById('newTaskText').value = '';
       } catch (err) {
         alert('Грешка при връзка със сървъра.');
@@ -279,9 +288,7 @@
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         delete commentDrafts[taskId];
         openComments.add(taskId);
-        tasksData = data.tasks || [];
-        pendingData = data.pendingTasks || [];
-        render(tasksData, pendingData, data.name);
+        applyData(data);
       } catch (err) {
         alert('Грешка при връзка със сървъра.');
       }
@@ -296,9 +303,7 @@
         const data = await res.json();
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         editingCommentId = null;
-        tasksData = data.tasks || [];
-        pendingData = data.pendingTasks || [];
-        render(tasksData, pendingData, data.name);
+        applyData(data);
       } catch (err) {
         alert('Грешка при връзка със сървъра.');
       }
@@ -312,9 +317,7 @@
         });
         const data = await res.json();
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
-        tasksData = data.tasks || [];
-        pendingData = data.pendingTasks || [];
-        render(tasksData, pendingData, data.name);
+        applyData(data);
       } catch (err) {
         alert('Грешка при връзка със сървъра.');
       }
@@ -332,7 +335,7 @@
       input.disabled = false;
     });
     refresh();
-    setInterval(function () { if (!editingCommentId) refresh(); }, 45000);
+    setInterval(function () { if (!editingCommentId) refresh(); }, 15000);
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible' && !editingCommentId) refresh();
     });
