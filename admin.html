@@ -18,9 +18,11 @@
       <div class="addrow">
         <input type="text" id="newTaskText" placeholder="Описание на задачата...">
         <select id="newTaskWho"></select>
+        <label class="important-check"><input type="checkbox" id="newTaskImportant"> Важна</label>
         <button class="btn-primary" id="addBtn">Добави</button>
       </div>
     </div>
+    <div class="card important-card" id="importantCard"></div>
     <div class="card pending-card" id="approvalCard"></div>
     <div class="card" id="activeCard"></div>
     <div class="card" id="doneCard"></div>
@@ -166,15 +168,45 @@
       return '<div class="edit-row">' +
         '<input type="text" class="edit-text" value="' + esc(t.text) + '">' +
         '<select class="edit-assignee">' + peopleOptions(t.assignee) + '</select>' +
+        '<label class="important-check"><input type="checkbox" class="edit-important"' + (t.important ? ' checked' : '') + '> Важна</label>' +
         '<button class="btn-primary edit-save" data-id="' + esc(t.id) + '">Запази</button>' +
         '<button class="btn-ghost edit-cancel" data-id="' + esc(t.id) + '">Отказ</button>' +
       '</div>';
+    }
+
+    function importantBadge() {
+      return '<span class="badge-important">Важна</span>';
     }
 
     function groupByAssignee(rows) {
       const order = [], map = {};
       rows.forEach(function (t) { if (!(t.assignee in map)) { map[t.assignee] = []; order.push(t.assignee); } map[t.assignee].push(t); });
       return { order: order, map: map };
+    }
+
+    function renderImportant() {
+      const important = data.filter(function (t) { return t.status === 'Активна' && t.important; });
+      let html = '<h2>Важни задачи (' + important.length + ')</h2>';
+      if (important.length) {
+        const g = groupByAssignee(important);
+        g.order.forEach(function (name) {
+          html += '<div class="group-name">' + esc(name) + ' (' + g.map[name].length + ')</div><ul class="tasks">';
+          g.map[name].forEach(function (t) {
+            const row = t.id === editingId ? editRowHtml(t) :
+              '<input type="checkbox" class="chk" data-id="' + esc(t.id) + '">' +
+              importantBadge() +
+              taskTextHtml(t) +
+              commentToggleBtn(t) +
+              '<button class="btn-ghost" data-edit="' + esc(t.id) + '">✎</button>' +
+              '<button class="btn-ghost" data-del="' + esc(t.id) + '">✕</button>';
+            html += '<li class="important-row" data-id="' + esc(t.id) + '"><div class="task-row">' + row + '</div>' + commentsHtml(t) + '</li>';
+          });
+          html += '</ul>';
+        });
+      } else {
+        html += '<div class="empty">Няма важни задачи в момента.</div>';
+      }
+      document.getElementById('importantCard').innerHTML = html;
     }
 
     function renderApproval() {
@@ -203,7 +235,7 @@
     }
 
     function renderActive() {
-      const active = data.filter(function (t) { return t.status === 'Активна'; });
+      const active = data.filter(function (t) { return t.status === 'Активна' && !t.important; });
       let html = '<h2>Активни задачи (' + active.length + ')</h2>';
       if (active.length) {
         const g = groupByAssignee(active);
@@ -287,6 +319,7 @@
           const li = btn.closest('li');
           const textInput = li.querySelector('.edit-text');
           const assigneeSelect = li.querySelector('.edit-assignee');
+          const importantCb = li.querySelector('.edit-important');
           const text = textInput.value.trim();
           const assignee = assigneeSelect.value;
           if (!text) return;
@@ -294,12 +327,14 @@
           btn.textContent = 'Запазва се...';
           textInput.disabled = true;
           assigneeSelect.disabled = true;
-          await editTask(btn.getAttribute('data-id'), text, assignee);
+          importantCb.disabled = true;
+          await editTask(btn.getAttribute('data-id'), text, assignee, importantCb.checked);
           if (document.body.contains(btn)) {
             btn.disabled = false;
             btn.textContent = 'Запази';
             textInput.disabled = false;
             assigneeSelect.disabled = false;
+            importantCb.disabled = false;
           }
         });
       });
@@ -403,11 +438,13 @@
 
     function render() {
       if (!Array.isArray(data)) {
+        document.getElementById('importantCard').innerHTML = '';
         document.getElementById('approvalCard').innerHTML = '';
         document.getElementById('activeCard').innerHTML = '<h2>Активни задачи</h2><div class="empty">Няма данни (виж конзолата за грешка).</div>';
         document.getElementById('doneCard').innerHTML = '';
         return;
       }
+      renderImportant();
       renderApproval();
       renderActive();
       renderDone();
@@ -427,20 +464,22 @@
     async function addTask() {
       const text = document.getElementById('newTaskText').value.trim();
       const who = document.getElementById('newTaskWho').value;
+      const important = document.getElementById('newTaskImportant').checked;
       if (!text) return;
       try {
-        const res = await apiPost('addTask', { text: text, assignee: who });
+        const res = await apiPost('addTask', { text: text, assignee: who, important: important });
         if (res.ok === false) { onError({ message: res.error }); return; }
         const created = (res.tasks || []).find(function (t) { return t.text === text && t.assignee === who; });
         if (created) markTaskOpened(created);
         applyData(res);
         document.getElementById('newTaskText').value = '';
+        document.getElementById('newTaskImportant').checked = false;
       } catch (err) { onError(err); }
     }
 
-    async function editTask(id, text, assignee) {
+    async function editTask(id, text, assignee, important) {
       try {
-        const res = await apiPost('editTask', { id: id, text: text, assignee: assignee });
+        const res = await apiPost('editTask', { id: id, text: text, assignee: assignee, important: important });
         if (res.ok === false) { onError({ message: res.error }); return; }
         editingId = null;
         applyData(res);
@@ -533,13 +572,16 @@
     document.getElementById('addBtn').addEventListener('click', async function () {
       const btn = document.getElementById('addBtn');
       const input = document.getElementById('newTaskText');
+      const importantCb = document.getElementById('newTaskImportant');
       btn.disabled = true;
       btn.textContent = 'Добавя се...';
       input.disabled = true;
+      importantCb.disabled = true;
       await addTask();
       btn.disabled = false;
       btn.textContent = 'Добави';
       input.disabled = false;
+      importantCb.disabled = false;
     });
     buildLinks();
     refresh();
