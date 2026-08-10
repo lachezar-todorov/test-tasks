@@ -31,6 +31,23 @@ const NAME_MAP = {
   todor: 'Тодор'
 };
 
+const PROJECTS = [
+  'Холидей парк, гр. Русе',
+  'Дом за възрастни хора, гр. Момин проход',
+  'Холидей парк, Симеоново',
+  'Алумакс',
+  'Биотрейд',
+  'Белисимо',
+  'Ресторант Шамот',
+  'Здравко Здравков',
+  'Технополис, гр. Монтана',
+  'Младен, с. Лозен'
+];
+
+function normalizeProject_(project) {
+  return PROJECTS.indexOf(project) !== -1 ? project : '';
+}
+
 const DEFAULT_PIN = '1234'; // смени тук за нов ПИН (или сложи ADMIN_PIN в Script Properties)
 const SHEET_TASKS = 'Задачи';
 const SHEET_ARCHIVE = 'Архив';
@@ -51,8 +68,12 @@ function ensureSheets_() {
   let t = ss.getSheetByName(SHEET_TASKS);
   if (!t) {
     t = ss.insertSheet(SHEET_TASKS);
-    t.appendRow(['ID', 'Текст', 'Изпълнител', 'Статус', 'Създадена', 'Изпълнена']);
+    t.appendRow(['ID', 'Текст', 'Изпълнител', 'Статус', 'Създадена', 'Изпълнена', 'Важна', 'Проект']);
     t.setFrozenRows(1);
+  } else {
+    // добавя се към по-стари листове "Задачи", създадени преди тези колони
+    if (t.getRange(1, 7).getValue() === '') t.getRange(1, 7).setValue('Важна');
+    if (t.getRange(1, 8).getValue() === '') t.getRange(1, 8).setValue('Проект');
   }
 
   let a = ss.getSheetByName(SHEET_ARCHIVE);
@@ -112,6 +133,8 @@ function readTasks_() {
       status: r[3],
       created: createdDate ? Utilities.formatDate(createdDate, tz, 'dd.MM.yyyy HH:mm') : String(r[4] || ''),
       done: r[5] instanceof Date ? Utilities.formatDate(r[5], tz, 'dd.MM.yyyy HH:mm') : String(r[5] || ''),
+      important: r[6] === true,
+      project: r[7] || '',
       createdRaw_: createdDate ? createdDate.getTime() : 0
     });
   }
@@ -252,7 +275,7 @@ function doPost(e) {
         return json_({ ok: false, error: 'Невалидни данни за задачата.' });
       }
       const { t } = ensureSheets_();
-      t.appendRow([Utilities.getUuid(), text, assignee, STATUS_ACTIVE, new Date(), '']);
+      t.appendRow([Utilities.getUuid(), text, assignee, STATUS_ACTIVE, new Date(), '', !!body.important, normalizeProject_(body.project)]);
       return tasksResponse_();
     }
 
@@ -261,7 +284,7 @@ function doPost(e) {
       const text = (body.text || '').trim();
       if (!text) return json_({ ok: false, error: 'Липсва текст на задачата.' });
       const { t } = ensureSheets_();
-      t.appendRow([Utilities.getUuid(), text, personName, STATUS_PENDING, new Date(), '']);
+      t.appendRow([Utilities.getUuid(), text, personName, STATUS_PENDING, new Date(), '', !!body.important, normalizeProject_(body.project)]);
       return tasksResponse_({ u: body.u });
     }
 
@@ -285,6 +308,8 @@ function doPost(e) {
       if (assignee && Object.values(NAME_MAP).indexOf(assignee) !== -1) {
         t.getRange(row.sheetRow, 3).setValue(assignee);
       }
+      t.getRange(row.sheetRow, 7).setValue(!!body.important);
+      t.getRange(row.sheetRow, 8).setValue(normalizeProject_(body.project));
       return tasksResponse_();
     }
 
@@ -374,7 +399,6 @@ function doPost(e) {
       done.sort(function (x, y) { return y.sheetRow - x.sheetRow; }).forEach(function (r) { t.deleteRow(r.sheetRow); });
       return tasksResponse_();
     }
-
 
     default:
       return json_({ ok: false, error: 'Непозната команда.' });
