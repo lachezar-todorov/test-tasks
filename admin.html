@@ -217,8 +217,9 @@
         g.order.forEach(function (name) {
           html += '<div class="group-name">' + esc(name) + ' (' + g.map[name].length + ')</div><ul class="tasks">';
           g.map[name].forEach(function (t) {
-            html += '<li data-id="' + esc(t.id) + '"><div class="task-row">' +
+            html += '<li class="' + (t.important ? 'important-row' : '') + '" data-id="' + esc(t.id) + '"><div class="task-row">' +
               '<span class="badge-pending">Чака</span>' +
+              (t.important ? importantBadge() : '') +
               taskTextHtml(t, null, true) +
               markReadBtnHtml(t) +
               commentToggleBtn(t) +
