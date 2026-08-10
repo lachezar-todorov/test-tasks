@@ -146,3 +146,11 @@ ul.tasks li:hover{background:#fafaf6;}
 .important-check{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);flex-shrink:0;cursor:pointer;}
 .important-check input{cursor:pointer;}
 
+/* --- проекти --- */
+.tabs{display:flex;gap:4px;padding:0 2px;margin-bottom:16px;border-bottom:1px solid var(--line);}
+.tab-btn{background:transparent;color:var(--muted);padding:10px 18px;border-radius:8px 8px 0 0;font-weight:600;font-size:13.5px;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;}
+.tab-btn.active{color:var(--teal-dark);border-bottom-color:var(--teal);background:#fff;}
+.tab-btn:hover:not(.active){background:#f7f5ee;color:var(--ink);}
+.project-picker{display:flex;gap:8px;padding:16px 18px;flex-wrap:wrap;}
+.project-picker select{flex:1 1 200px;}
+.badge-project{background:var(--teal-soft);color:var(--teal-dark);font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;letter-spacing:.02em;flex-shrink:0;}
