@@ -13,22 +13,43 @@
     <span id="todayLabel"></span>
   </div>
   <div class="wrap">
-    <div class="card">
-      <h2>Нова задача</h2>
-      <div class="addrow">
-        <input type="text" id="newTaskText" placeholder="Описание на задачата...">
-        <select id="newTaskWho"></select>
-        <label class="important-check"><input type="checkbox" id="newTaskImportant"> Важна</label>
-        <button class="btn-primary" id="addBtn">Добави</button>
+    <div class="tabs">
+      <button type="button" class="tab-btn active" id="tabDashboard">Табло</button>
+      <button type="button" class="tab-btn" id="tabProjects">Проекти</button>
+    </div>
+    <div id="dashboardView">
+      <div class="card">
+        <h2>Нова задача</h2>
+        <div class="addrow">
+          <input type="text" id="newTaskText" placeholder="Описание на задачата...">
+          <select id="newTaskWho"></select>
+          <select id="newTaskProject"></select>
+          <label class="important-check"><input type="checkbox" id="newTaskImportant"> Важна</label>
+          <button class="btn-primary" id="addBtn">Добави</button>
+        </div>
+      </div>
+      <div class="card important-card" id="importantCard"></div>
+      <div class="card pending-card" id="approvalCard"></div>
+      <div class="card" id="activeCard"></div>
+      <div class="card" id="doneCard"></div>
+      <div class="card">
+        <h2>Лични линкове — изпрати на всеки</h2>
+        <ul class="links" id="linksList"></ul>
       </div>
     </div>
-    <div class="card important-card" id="importantCard"></div>
-    <div class="card pending-card" id="approvalCard"></div>
-    <div class="card" id="activeCard"></div>
-    <div class="card" id="doneCard"></div>
-    <div class="card">
-      <h2>Лични линкове — изпрати на всеки</h2>
-      <ul class="links" id="linksList"></ul>
+    <div id="projectsView" style="display:none;">
+      <div class="card">
+        <h2>Проекти</h2>
+        <div class="project-picker">
+          <select id="projectSelect"></select>
+          <select id="projectSort">
+            <option value="activity">Подреди по активност</option>
+            <option value="assignee">Подреди по изпълнител</option>
+            <option value="status">Подреди по статус</option>
+          </select>
+        </div>
+        <div id="projectTaskList"><div class="empty">Избери проект отгоре, за да видиш задачите му.</div></div>
+      </div>
     </div>
   </div>
 
@@ -39,6 +60,19 @@
       lacho: 'Лъчо', drago: 'Драго', ivo:   'Иво',  todor: 'Тодор'
     };
 
+    const PROJECTS = [
+      'Холидей парк, гр. Русе',
+      'Дом за възрастни хора, гр. Момин проход',
+      'Холидей парк, Симеоново',
+      'Алумакс',
+      'Биотрейд',
+      'Белисимо',
+      'Ресторант Шамот',
+      'Здравко Здравков',
+      'Технополис, гр. Монтана',
+      'Младен, с. Лозен'
+    ];
+
     const pin = sessionStorage.getItem('pin');
     if (!pin) { location.href = 'index.html'; }
 
@@ -46,6 +80,8 @@
     let lastSnapshot = null;
     let editingId = null;
     let editingCommentId = null;
+    let selectedProject = '';
+    let projectSort = 'activity';
     const openComments = new Set();
     const commentDrafts = {};
 
@@ -112,6 +148,16 @@
       }).join('');
     }
 
+    function projectOptions(selected) {
+      return '<option value="">— без проект —</option>' + PROJECTS.map(function (p) {
+        return '<option value="' + esc(p) + '"' + (p === selected ? ' selected' : '') + '>' + esc(p) + '</option>';
+      }).join('');
+    }
+
+    function projectBadge(t) {
+      return t.project ? '<span class="badge-project">' + esc(t.project) + '</span>' : '';
+    }
+
     function commentsHtml(t) {
       const open = openComments.has(t.id);
       const list = (t.comments || []).map(function (c) {
@@ -168,6 +214,7 @@
       return '<div class="edit-row">' +
         '<input type="text" class="edit-text" value="' + esc(t.text) + '">' +
         '<select class="edit-assignee">' + peopleOptions(t.assignee) + '</select>' +
+        '<select class="edit-project">' + projectOptions(t.project) + '</select>' +
         '<label class="important-check"><input type="checkbox" class="edit-important"' + (t.important ? ' checked' : '') + '> Важна</label>' +
         '<button class="btn-primary edit-save" data-id="' + esc(t.id) + '">Запази</button>' +
         '<button class="btn-ghost edit-cancel" data-id="' + esc(t.id) + '">Отказ</button>' +
@@ -195,6 +242,7 @@
             const row = t.id === editingId ? editRowHtml(t) :
               '<input type="checkbox" class="chk" data-id="' + esc(t.id) + '">' +
               importantBadge() +
+              projectBadge(t) +
               taskTextHtml(t) +
               commentToggleBtn(t) +
               '<button class="btn-ghost" data-edit="' + esc(t.id) + '">✎</button>' +
@@ -220,6 +268,7 @@
             html += '<li class="' + (t.important ? 'important-row' : '') + '" data-id="' + esc(t.id) + '"><div class="task-row">' +
               '<span class="badge-pending">Чака</span>' +
               (t.important ? importantBadge() : '') +
+              projectBadge(t) +
               taskTextHtml(t, null, true) +
               markReadBtnHtml(t) +
               commentToggleBtn(t) +
@@ -245,6 +294,7 @@
           g.map[name].forEach(function (t) {
             const row = t.id === editingId ? editRowHtml(t) :
               '<input type="checkbox" class="chk" data-id="' + esc(t.id) + '">' +
+              projectBadge(t) +
               taskTextHtml(t) +
               commentToggleBtn(t) +
               '<button class="btn-ghost" data-edit="' + esc(t.id) + '">✎</button>' +
@@ -266,6 +316,7 @@
         html += '<ul class="tasks">' + done.map(function (t) {
           return '<li data-id="' + esc(t.id) + '"><div class="task-row">' +
             '<input type="checkbox" class="chk" checked data-id="' + esc(t.id) + '">' +
+            projectBadge(t) +
             taskTextHtml(t, 'task-text-done') +
             '<span class="task-assignee">' + esc(t.assignee) + '</span>' +
             commentToggleBtn(t) +
@@ -277,6 +328,57 @@
       html += '<div class="footer-row"><span class="count">Приключването премества изпълнените в Архив и ги маха от тук — активните остават за утре.</span>' +
         '<button class="btn-export" id="closeDayBtn" ' + (done.length ? '' : 'disabled') + '>Приключи деня</button></div>';
       document.getElementById('doneCard').innerHTML = html;
+    }
+
+    function sortProjectRows(rows, sortBy) {
+      const copy = rows.slice();
+      if (sortBy === 'assignee') {
+        copy.sort(function (a, b) { return a.assignee.localeCompare(b.assignee, 'bg'); });
+      } else if (sortBy === 'status') {
+        const order = { 'Чака одобрение': 0, 'Активна': 1, 'Изпълнена': 2 };
+        copy.sort(function (a, b) {
+          return (order[a.status] !== undefined ? order[a.status] : 3) - (order[b.status] !== undefined ? order[b.status] : 3);
+        });
+      }
+      // 'activity' (по подразбиране) — реда, в който сървърът вече ги връща (по последна активност)
+      return copy;
+    }
+
+    function renderProjectsView() {
+      const listEl = document.getElementById('projectTaskList');
+      if (!selectedProject) {
+        listEl.innerHTML = '<div class="empty">Избери проект отгоре, за да видиш задачите му.</div>';
+        return;
+      }
+      let rows = data.filter(function (t) { return t.project === selectedProject; });
+      rows = sortProjectRows(rows, projectSort);
+      if (!rows.length) {
+        listEl.innerHTML = '<div class="empty">Няма задачи за този проект.</div>';
+        return;
+      }
+      const g = groupByAssignee(rows);
+      let html = '';
+      g.order.forEach(function (name) {
+        html += '<div class="group-name">' + esc(name) + ' (' + g.map[name].length + ')</div><ul class="tasks">';
+        g.map[name].forEach(function (t) {
+          const isDone = t.status === 'Изпълнена';
+          const isPending = t.status === 'Чака одобрение';
+          const row = t.id === editingId ? editRowHtml(t) :
+            (isPending
+              ? '<span class="badge-pending">Чака</span>'
+              : '<input type="checkbox" class="chk" ' + (isDone ? 'checked ' : '') + 'data-id="' + esc(t.id) + '">') +
+            (t.important ? importantBadge() : '') +
+            taskTextHtml(t, isDone ? 'task-text-done' : null, isPending) +
+            (isPending ? markReadBtnHtml(t) : '') +
+            commentToggleBtn(t) +
+            (isPending
+              ? '<button class="btn-primary" data-approve="' + esc(t.id) + '">Одобри</button><button class="btn-ghost" data-del="' + esc(t.id) + '">Отхвърли</button>'
+              : '<button class="btn-ghost" data-edit="' + esc(t.id) + '">✎</button><button class="btn-ghost" data-del="' + esc(t.id) + '">✕</button>');
+          html += '<li class="' + (t.important ? 'important-row' : '') + '" data-id="' + esc(t.id) + '"><div class="task-row">' + row + '</div>' + commentsHtml(t) + '</li>';
+        });
+        html += '</ul>';
+      });
+      listEl.innerHTML = html;
     }
 
     function attachHandlers() {
@@ -320,21 +422,25 @@
           const li = btn.closest('li');
           const textInput = li.querySelector('.edit-text');
           const assigneeSelect = li.querySelector('.edit-assignee');
+          const projectSelect = li.querySelector('.edit-project');
           const importantCb = li.querySelector('.edit-important');
           const text = textInput.value.trim();
           const assignee = assigneeSelect.value;
+          const project = projectSelect.value;
           if (!text) return;
           btn.disabled = true;
           btn.textContent = 'Запазва се...';
           textInput.disabled = true;
           assigneeSelect.disabled = true;
+          projectSelect.disabled = true;
           importantCb.disabled = true;
-          await editTask(btn.getAttribute('data-id'), text, assignee, importantCb.checked);
+          await editTask(btn.getAttribute('data-id'), text, assignee, importantCb.checked, project);
           if (document.body.contains(btn)) {
             btn.disabled = false;
             btn.textContent = 'Запази';
             textInput.disabled = false;
             assigneeSelect.disabled = false;
+            projectSelect.disabled = false;
             importantCb.disabled = false;
           }
         });
@@ -449,6 +555,7 @@
       renderApproval();
       renderActive();
       renderDone();
+      renderProjectsView();
       attachHandlers();
     }
 
@@ -465,22 +572,24 @@
     async function addTask() {
       const text = document.getElementById('newTaskText').value.trim();
       const who = document.getElementById('newTaskWho').value;
+      const project = document.getElementById('newTaskProject').value;
       const important = document.getElementById('newTaskImportant').checked;
       if (!text) return;
       try {
-        const res = await apiPost('addTask', { text: text, assignee: who, important: important });
+        const res = await apiPost('addTask', { text: text, assignee: who, important: important, project: project });
         if (res.ok === false) { onError({ message: res.error }); return; }
         const created = (res.tasks || []).find(function (t) { return t.text === text && t.assignee === who; });
         if (created) markTaskOpened(created);
         applyData(res);
         document.getElementById('newTaskText').value = '';
         document.getElementById('newTaskImportant').checked = false;
+        document.getElementById('newTaskProject').value = '';
       } catch (err) { onError(err); }
     }
 
-    async function editTask(id, text, assignee, important) {
+    async function editTask(id, text, assignee, important, project) {
       try {
-        const res = await apiPost('editTask', { id: id, text: text, assignee: assignee, important: important });
+        const res = await apiPost('editTask', { id: id, text: text, assignee: assignee, important: important, project: project });
         if (res.ok === false) { onError({ message: res.error }); return; }
         editingId = null;
         applyData(res);
@@ -570,21 +679,55 @@
     // init
     document.getElementById('todayLabel').textContent = new Date().toLocaleDateString('bg-BG');
     document.getElementById('newTaskWho').innerHTML = peopleOptions();
+    document.getElementById('newTaskProject').innerHTML = projectOptions();
     document.getElementById('addBtn').addEventListener('click', async function () {
       const btn = document.getElementById('addBtn');
       const input = document.getElementById('newTaskText');
       const importantCb = document.getElementById('newTaskImportant');
+      const projectSelect = document.getElementById('newTaskProject');
       btn.disabled = true;
       btn.textContent = 'Добавя се...';
       input.disabled = true;
       importantCb.disabled = true;
+      projectSelect.disabled = true;
       await addTask();
       btn.disabled = false;
       btn.textContent = 'Добави';
       input.disabled = false;
       importantCb.disabled = false;
+      projectSelect.disabled = false;
     });
     buildLinks();
+
+    const tabDashboard = document.getElementById('tabDashboard');
+    const tabProjects = document.getElementById('tabProjects');
+    const dashboardView = document.getElementById('dashboardView');
+    const projectsView = document.getElementById('projectsView');
+    tabDashboard.addEventListener('click', function () {
+      tabDashboard.classList.add('active');
+      tabProjects.classList.remove('active');
+      dashboardView.style.display = '';
+      projectsView.style.display = 'none';
+    });
+    tabProjects.addEventListener('click', function () {
+      tabProjects.classList.add('active');
+      tabDashboard.classList.remove('active');
+      dashboardView.style.display = 'none';
+      projectsView.style.display = '';
+    });
+    document.getElementById('projectSelect').innerHTML = '<option value="">— избери проект —</option>' +
+      PROJECTS.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
+    document.getElementById('projectSelect').addEventListener('change', function () {
+      selectedProject = this.value;
+      renderProjectsView();
+      attachHandlers();
+    });
+    document.getElementById('projectSort').addEventListener('change', function () {
+      projectSort = this.value;
+      renderProjectsView();
+      attachHandlers();
+    });
+
     refresh();
 
     // автоматично опресняване — не пипа задача/коментар, който в момента се редактира
