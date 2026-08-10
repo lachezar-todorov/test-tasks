@@ -161,7 +161,6 @@
       return '<button class="btn-ghost mark-read-btn" data-mark-read="' + esc(t.id) + '" title="Маркирай задачата като прочетена">✓ Прочетено</button>';
     }
 
-    
     function editRowHtml(t) {
       return '<div class="edit-row">' +
         '<input type="text" class="edit-text" value="' + esc(t.text) + '">' +
@@ -305,12 +304,21 @@
         });
       });
       document.querySelectorAll('.comment-send').forEach(function (btn) {
-        btn.addEventListener('click', function () {
+        btn.addEventListener('click', async function () {
           const id = btn.getAttribute('data-task');
           const input = document.querySelector('.comment-input[data-task="' + CSS.escape(id) + '"]');
           const text = input.value.trim();
           if (!text) return;
-          addComment(id, text);
+          btn.disabled = true;
+          btn.textContent = 'Изпраща се...';
+          input.disabled = true;
+          await addComment(id, text);
+          // при успех render() вече е заместил този бутон с нов; при грешка го връщаме в нормално състояние
+          if (document.body.contains(btn)) {
+            btn.disabled = false;
+            btn.textContent = 'Изпрати';
+            input.disabled = false;
+          }
         });
       });
       document.querySelectorAll('.comment-edit-btn').forEach(function (btn) {
@@ -471,12 +479,22 @@
     // init
     document.getElementById('todayLabel').textContent = new Date().toLocaleDateString('bg-BG');
     document.getElementById('newTaskWho').innerHTML = peopleOptions();
-    document.getElementById('addBtn').addEventListener('click', addTask);
+    document.getElementById('addBtn').addEventListener('click', async function () {
+      const btn = document.getElementById('addBtn');
+      const input = document.getElementById('newTaskText');
+      btn.disabled = true;
+      btn.textContent = 'Добавя се...';
+      input.disabled = true;
+      await addTask();
+      btn.disabled = false;
+      btn.textContent = 'Добави';
+      input.disabled = false;
+    });
     buildLinks();
     refresh();
 
     // автоматично опресняване — не пипа задача/коментар, който в момента се редактира
-    setInterval(function () { if (!editingId && !editingCommentId) refresh(); }, 45000);
+    setInterval(function () { if (!editingId && !editingCommentId) refresh(); }, 15000);
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible' && !editingId && !editingCommentId) refresh();
     });
