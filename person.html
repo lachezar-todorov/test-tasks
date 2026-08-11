@@ -11,28 +11,49 @@
     <img class="site-logo" src="logo.svg" alt="" onerror="this.style.display='none'">
   </div>
   <div class="changelog-banner" id="changelogBanner" style="display:none;">
-    <div class="changelog-text">🆕 <strong>НОВО:</strong> Добавяне на проект към задача, задължително изискване на крайна или начална дата при създаване на задача, харесване на коментари и редактиране или изтриване на все още неодобрените задачи.</div>
-    <button type="button" class="btn-ghost" id="changelogDismiss">Прочетено</button>
-  </div>
-  <div class="card person" style="margin:8px auto 0;">
-    <h2 id="nameHeader">Задачи</h2>
-    <p class="sub-note">Списъкът се обновява автоматично. Най-новите задачи са отгоре.</p>
-    <div class="propose-row">
-      <input type="text" id="newTaskText" placeholder="Предложи си задача...">
-      <select id="newTaskProject"></select>
-      <label class="date-field">От <input type="date" id="newTaskStart"></label>
-      <label class="date-field">До <input type="date" id="newTaskEnd"></label>
-      <label class="important-check"><input type="checkbox" id="newTaskImportant"> Важна</label>
-      <button class="btn-primary" id="addBtn">Добави</button>
-    </div>
-    <p class="sub-note" style="padding-top:0;">Трябва да избереш поне начална или крайна дата.</p>
-    <div id="list"><div class="empty">Зареждане...</div></div>
+    <div class="changelog-text">🆕 <strong>Новото:</strong> проекти, календар с начални/крайни дати на задачите, лайкове на коментари, и вече можеш сам да редактираш/трийш своите все още неодобрени задачи.</div>
+    <button type="button" class="btn-ghost" id="changelogDismiss">Скрий</button>
   </div>
 
-  <div class="card person pending-card" style="margin:20px auto 0;">
-    <h2>Непотвърдени задачи</h2>
-    <p class="sub-note">Тези задачи си ги предложил сам — чакат одобрение от администраторския панел.</p>
-    <div id="pendingList"><div class="empty">Зареждане...</div></div>
+  <div class="person-wrap">
+    <div class="tabs">
+      <button type="button" class="tab-btn active" id="tabPersonal">Лично табло</button>
+      <button type="button" class="tab-btn" id="tabCalendarPerson">Календар</button>
+    </div>
+    <div id="personalView">
+      <div class="card person" style="margin:8px auto 0;">
+        <h2 id="nameHeader">Задачи</h2>
+        <p class="sub-note">Списъкът се обновява автоматично. Най-новите задачи са отгоре.</p>
+        <div class="propose-row">
+          <input type="text" id="newTaskText" placeholder="Предложи си задача...">
+          <select id="newTaskProject"></select>
+          <label class="date-field">От <input type="date" id="newTaskStart"></label>
+          <label class="date-field">До <input type="date" id="newTaskEnd"></label>
+          <label class="important-check"><input type="checkbox" id="newTaskImportant"> Важна</label>
+          <button class="btn-primary" id="addBtn">Добави</button>
+        </div>
+        <p class="sub-note" style="padding-top:0;">Трябва да избереш поне начална или крайна дата.</p>
+        <div id="list"><div class="empty">Зареждане...</div></div>
+      </div>
+
+      <div class="card person pending-card" style="margin:20px auto 0;">
+        <h2>Непотвърдени задачи</h2>
+        <p class="sub-note">Тези задачи си ги предложил сам — чакат одобрение от администраторския панел.</p>
+        <div id="pendingList"><div class="empty">Зареждане...</div></div>
+      </div>
+    </div>
+    <div id="calendarViewPerson" style="display:none;">
+      <div class="card" style="max-width:none;margin-top:8px;">
+        <h2>Календар</h2>
+        <p class="sub-note">Само за преглед — задачите се показват тук само ако администраторът ги е включил в календара.</p>
+        <div class="calendar-nav">
+          <button type="button" class="btn-ghost" id="calPrevPerson">‹ Предишен</button>
+          <span class="calendar-label" id="calLabelPerson"></span>
+          <button type="button" class="btn-ghost" id="calNextPerson">Следващ ›</button>
+        </div>
+        <div id="calendarGridPerson"></div>
+      </div>
+    </div>
   </div>
 
   <script src="config.js"></script>
@@ -41,7 +62,7 @@
       'Холидей парк, гр. Русе',
       'Дом за възрастни хора, гр. Момин проход',
       'Холидей парк, Симеоново',
-      'Алумакс',
+      'Алмакс',
       'Биотрейд',
       'Белисимо',
       'Ресторант Шамот',
@@ -58,8 +79,11 @@
     let editingPendingId = null;
     let tasksData = [];
     let pendingData = [];
+    let calendarTasksData = [];
     let myName = '';
     let lastSnapshot = null;
+    let calYear = (new Date()).getFullYear();
+    let calMonth = (new Date()).getMonth();
 
     // Две отделни нива на "прочетено": ниво коментар (маркира се само с клик
     // direktно върху него) и ниво задача (само "новото" на задачата — маха се
@@ -375,14 +399,88 @@
       renderList('pendingList', pending, 'Нямаш непотвърдени задачи в момента.', true);
     }
 
+    const WEEKDAY_NAMES = ['Пон', 'Вт', 'Ср', 'Чет', 'Пет', 'Съб', 'Нед'];
+    const MONTH_NAMES = ['Януари', 'Февруари', 'Март', 'Април', 'Май', 'Юни', 'Юли', 'Август', 'Септември', 'Октомври', 'Ноември', 'Декември'];
+
+    // ISO 8601 номер на седмицата — идентично на admin.html.
+    function isoWeekNumber(date) {
+      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      const dayNum = (d.getUTCDay() + 6) % 7;
+      d.setUTCDate(d.getUTCDate() - dayNum + 3);
+      const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+      const firstDayNum = (firstThursday.getUTCDay() + 6) % 7;
+      firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
+      return 1 + Math.round((d - firstThursday) / (7 * 24 * 3600 * 1000));
+    }
+
+    function calDateKey(y, m, d) {
+      return y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    }
+
+    // Задачите на всички (не само своите) — сървърът вече връща само тези,
+    // които админ изрично е включил в календара. Изцяло за преглед — тук
+    // няма никакви бутони за промяна.
+    function tasksForDayPerson(key) {
+      return calendarTasksData.filter(function (t) {
+        if (t.startDate && t.endDate) return key >= t.startDate && key <= t.endDate;
+        if (t.startDate) return key === t.startDate;
+        if (t.endDate) return key === t.endDate;
+        return false;
+      });
+    }
+
+    function renderCalendarPerson() {
+      const label = document.getElementById('calLabelPerson');
+      if (label) label.textContent = MONTH_NAMES[calMonth] + ' ' + calYear;
+      const grid = document.getElementById('calendarGridPerson');
+      if (!grid) return;
+
+      const firstOfMonth = new Date(calYear, calMonth, 1);
+      const startOffset = (firstOfMonth.getDay() + 6) % 7;
+      const gridStart = new Date(calYear, calMonth, 1 - startOffset);
+      const today = new Date();
+      const todayKey = calDateKey(today.getFullYear(), today.getMonth(), today.getDate());
+
+      let html = '<div class="calendar-row calendar-weekdays"><div class="calendar-week-label"></div>' +
+        WEEKDAY_NAMES.map(function (n) { return '<div class="calendar-weekday">' + n + '</div>'; }).join('') +
+        '</div>';
+
+      for (let w = 0; w < 6; w++) {
+        const weekFirstDate = new Date(gridStart);
+        weekFirstDate.setDate(gridStart.getDate() + w * 7);
+        const weekNum = isoWeekNumber(weekFirstDate);
+        html += '<div class="calendar-row"><div class="calendar-week-label" title="Седмица">' + weekNum + '</div>';
+        for (let d = 0; d < 7; d++) {
+          const cellDate = new Date(gridStart);
+          cellDate.setDate(gridStart.getDate() + w * 7 + d);
+          const key = calDateKey(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate());
+          const inMonth = cellDate.getMonth() === calMonth;
+          const isToday = key === todayKey;
+          const dayTasks = tasksForDayPerson(key);
+          html += '<div class="calendar-cell' + (inMonth ? '' : ' calendar-cell-out') + (isToday ? ' calendar-cell-today' : '') + '">' +
+            '<div class="calendar-daynum">' + cellDate.getDate() + '</div>' +
+            '<div class="calendar-tasks">' + dayTasks.map(function (t) {
+              const isDeadline = !!(t.endDate && key === t.endDate);
+              const label = esc(t.assignee) + ': ' + esc(t.text);
+              return '<div class="calendar-task' + (isDeadline ? ' calendar-task-deadline' : '') + '" title="' + label + '">' + label + '</div>';
+            }).join('') + '</div>' +
+          '</div>';
+        }
+        html += '</div>';
+      }
+      grid.innerHTML = html;
+    }
+
     // Прилага нов отговор от сървъра. Използвай това (вместо direktно
     // задаване на tasksData/pendingData + render()) при всяко действие,
     // за да остане "тихият" refresh() в синхрон.
     function applyData(payload) {
       tasksData = payload.tasks || [];
       pendingData = payload.pendingTasks || [];
-      lastSnapshot = JSON.stringify({ t: tasksData, p: pendingData });
+      calendarTasksData = payload.calendarTasks || [];
+      lastSnapshot = JSON.stringify({ t: tasksData, p: pendingData, c: calendarTasksData });
       render(tasksData, pendingData, payload.name);
+      renderCalendarPerson();
     }
 
     async function refresh() {
@@ -399,7 +497,7 @@
           document.getElementById('pendingList').innerHTML = '';
           return;
         }
-        const snapshot = JSON.stringify({ t: data.tasks || [], p: data.pendingTasks || [] });
+        const snapshot = JSON.stringify({ t: data.tasks || [], p: data.pendingTasks || [], c: data.calendarTasks || [] });
         if (snapshot === lastSnapshot) return; // нищо ново — не пипаме екрана (за да не скача курсорът в коментар/поле)
         applyData(data);
       } catch (err) {
@@ -559,6 +657,30 @@
       localStorage.setItem(CHANGELOG_KEY, '1');
       changelogBanner.remove();
     });
+
+    const personTabs = [
+      { btn: document.getElementById('tabPersonal'), view: document.getElementById('personalView') },
+      { btn: document.getElementById('tabCalendarPerson'), view: document.getElementById('calendarViewPerson') }
+    ];
+    personTabs.forEach(function (tab) {
+      tab.btn.addEventListener('click', function () {
+        personTabs.forEach(function (other) {
+          other.btn.classList.toggle('active', other === tab);
+          other.view.style.display = other === tab ? '' : 'none';
+        });
+      });
+    });
+    document.getElementById('calPrevPerson').addEventListener('click', function () {
+      calMonth--;
+      if (calMonth < 0) { calMonth = 11; calYear--; }
+      renderCalendarPerson();
+    });
+    document.getElementById('calNextPerson').addEventListener('click', function () {
+      calMonth++;
+      if (calMonth > 11) { calMonth = 0; calYear++; }
+      renderCalendarPerson();
+    });
+    renderCalendarPerson();
 
     refresh();
     setInterval(function () { if (!editingCommentId && !editingPendingId) refresh(); }, 15000);
