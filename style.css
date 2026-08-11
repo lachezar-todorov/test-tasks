@@ -200,4 +200,4 @@ ul.tasks li:hover{background:#fafaf6;}
 
 /* --- person.html: табове (Лично табло / Календар) --- */
 .person-wrap{max-width:1100px;margin:8px auto 0;padding:0 18px 40px;}
-.person-wrap .tabs{margin-bottom:14px;}
+.person-wrap .tabs{max-width:760px;margin:0 auto 14px;}
