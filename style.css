@@ -177,11 +177,16 @@ ul.tasks li:hover{background:#fafaf6;}
 /* --- календар --- */
 .calendar-nav{display:flex;align-items:center;justify-content:center;gap:16px;padding:14px 18px;border-bottom:1px solid var(--line);}
 .calendar-label{font-size:15px;font-weight:700;color:var(--ink);min-width:160px;text-align:center;}
-.calendar-row{display:grid;grid-template-columns:36px repeat(7, 1fr);}
+/* скролва хоризонтално цялата решетка (седмици + дни) като едно цяло, ако
+   не се побере — вместо задача с дълъг текст да разшири само нейната
+   колона и да избута следващите дни извън видимата зона без начин да се
+   стигне до тях */
+.calendar-grid-wrap{overflow-x:auto;}
+.calendar-row{display:grid;grid-template-columns:36px repeat(7, 1fr);min-width:760px;}
 .calendar-weekdays{border-bottom:1px solid var(--line);}
 .calendar-weekday{text-align:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--teal-dark);padding:8px 2px;}
 .calendar-week-label{display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:var(--muted);background:#f7f5ee;}
-.calendar-cell{border-top:1px solid var(--line);border-left:1px solid var(--line);min-height:78px;padding:4px;background:#fff;}
+.calendar-cell{border-top:1px solid var(--line);border-left:1px solid var(--line);min-height:78px;min-width:0;padding:4px;background:#fff;}
 .calendar-row:last-child .calendar-cell{border-bottom:1px solid var(--line);}
 .calendar-cell:last-child{border-right:1px solid var(--line);}
 .calendar-cell-out{background:#fafaf6;}
