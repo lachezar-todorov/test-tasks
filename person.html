@@ -48,6 +48,7 @@
     const openComments = new Set();
     const commentDrafts = {};
     let editingCommentId = null;
+    let editingPendingId = null;
     let tasksData = [];
     let pendingData = [];
     let myName = '';
@@ -127,9 +128,9 @@
       return '<button class="btn-ghost comment-toggle' + (unread ? ' comment-toggle-unread' : '') + '" data-toggle="' + esc(t.id) + '">💬 ' + n + '</button>';
     }
 
-    function projectOptions() {
+    function projectOptions(selected) {
       return '<option value="">— без проект —</option>' + PROJECTS.map(function (p) {
-        return '<option value="' + esc(p) + '">' + esc(p) + '</option>';
+        return '<option value="' + esc(p) + '"' + (p === selected ? ' selected' : '') + '>' + esc(p) + '</option>';
       }).join('');
     }
 
@@ -150,19 +151,37 @@
       return '<button class="btn-ghost mark-read-btn" data-mark-read="' + esc(t.id) + '" title="Маркирай задачата като прочетена">✓ Прочетено</button>';
     }
 
-    function renderList(elId, rows, emptyMsg) {
+    // Само за собствените все още неодобрени задачи (pendingList) — редактиране/
+    // триене е позволено единствено докато чакат одобрение; щом веднъж бъдат
+    // одобрени, изчезват от тук и вече е само през админ панела.
+    function pendingEditRowHtml(t) {
+      return '<div class="task-row"><div class="edit-row">' +
+        '<input type="text" class="edit-text" value="' + esc(t.text) + '">' +
+        '<select class="edit-project">' + projectOptions(t.project) + '</select>' +
+        '<label class="important-check"><input type="checkbox" class="edit-important"' + (t.important ? ' checked' : '') + '> Важна</label>' +
+        '<button class="btn-primary pending-edit-save" data-id="' + esc(t.id) + '">Запази</button>' +
+        '<button class="btn-ghost pending-edit-cancel" data-id="' + esc(t.id) + '">Отказ</button>' +
+      '</div></div>';
+    }
+
+    function renderList(elId, rows, emptyMsg, editable) {
       const el = document.getElementById(elId);
       if (!rows || !rows.length) {
         el.innerHTML = '<div class="empty">' + emptyMsg + '</div>';
         return;
       }
       el.innerHTML = '<ul class="tasks">' + rows.map(function (t) {
+        if (editable && t.id === editingPendingId) {
+          return '<li data-id="' + esc(t.id) + '">' + pendingEditRowHtml(t) + commentsHtml(t) + '</li>';
+        }
         return '<li class="' + (t.important ? 'important-row' : '') + '" data-id="' + esc(t.id) + '"><div class="task-row">' +
           (t.important ? '<span class="badge-important">Важна</span>' : '') +
           projectBadge(t) +
           taskTextHtml(t) +
           markReadBtnHtml(t) +
           commentToggleBtn(t) +
+          (editable ? '<button class="btn-ghost" data-pending-edit="' + esc(t.id) + '" title="Редактирай">✎</button>' +
+            '<button class="btn-ghost" data-pending-del="' + esc(t.id) + '" title="Изтрий">✕</button>' : '') +
           '</div>' + commentsHtml(t) + '</li>';
       }).join('') + '</ul>';
       attachCommentHandlers(el);
@@ -188,6 +207,50 @@
           const t = tasksData.concat(pendingData).find(function (x) { return x.id === id; });
           if (t) markTaskOpened(t);
           render(tasksData, pendingData, document.getElementById('nameHeader').textContent);
+        });
+      });
+      scope.querySelectorAll('[data-pending-edit]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          editingPendingId = btn.getAttribute('data-pending-edit');
+          render(tasksData, pendingData, document.getElementById('nameHeader').textContent);
+        });
+      });
+      scope.querySelectorAll('.pending-edit-cancel').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          editingPendingId = null;
+          render(tasksData, pendingData, document.getElementById('nameHeader').textContent);
+        });
+      });
+      scope.querySelectorAll('.pending-edit-save').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+          const li = btn.closest('li');
+          const textInput = li.querySelector('.edit-text');
+          const projectSelect = li.querySelector('.edit-project');
+          const importantCb = li.querySelector('.edit-important');
+          const text = textInput.value.trim();
+          const project = projectSelect.value;
+          if (!text) return;
+          btn.disabled = true;
+          btn.textContent = 'Запазва се...';
+          textInput.disabled = true;
+          projectSelect.disabled = true;
+          importantCb.disabled = true;
+          await editPendingTask(btn.getAttribute('data-id'), text, project, importantCb.checked);
+          if (document.body.contains(btn)) {
+            btn.disabled = false;
+            btn.textContent = 'Запази';
+            textInput.disabled = false;
+            projectSelect.disabled = false;
+            importantCb.disabled = false;
+          }
+        });
+      });
+      scope.querySelectorAll('[data-pending-del]').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+          const id = btn.getAttribute('data-pending-del');
+          btn.disabled = true;
+          await deletePendingTask(id);
+          if (document.body.contains(btn)) btn.disabled = false;
         });
       });
       scope.querySelectorAll('.comment[data-comment-id]').forEach(function (el) {
@@ -252,8 +315,8 @@
       if (name) { document.getElementById('nameHeader').textContent = name; myName = name; }
       // важните задачи излизат отгоре, независимо от реда по активност
       const sorted = (rows || []).slice().sort(function (a, b) { return (b.important ? 1 : 0) - (a.important ? 1 : 0); });
-      renderList('list', sorted, 'Нямаш активни задачи в момента.');
-      renderList('pendingList', pending, 'Нямаш непотвърдени задачи в момента.');
+      renderList('list', sorted, 'Нямаш активни задачи в момента.', false);
+      renderList('pendingList', pending, 'Нямаш непотвърдени задачи в момента.', true);
     }
 
     // Прилага нов отговор от сървъра. Използвай това (вместо direktно
@@ -306,6 +369,36 @@
         document.getElementById('newTaskText').value = '';
         document.getElementById('newTaskImportant').checked = false;
         document.getElementById('newTaskProject').value = '';
+      } catch (err) {
+        alert('Грешка при връзка със сървъра.');
+      }
+    }
+
+    async function editPendingTask(id, text, project, important) {
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'personEditTask', u: u, id: id, text: text, project: project, important: important })
+        });
+        const data = await res.json();
+        if (data.ok === false) { alert('Грешка: ' + data.error); return; }
+        editingPendingId = null;
+        applyData(data);
+      } catch (err) {
+        alert('Грешка при връзка със сървъра.');
+      }
+    }
+
+    async function deletePendingTask(id) {
+      if (!confirm('Да изтрия ли тази задача?')) return;
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'personDeleteTask', u: u, id: id })
+        });
+        const data = await res.json();
+        if (data.ok === false) { alert('Грешка: ' + data.error); return; }
+        applyData(data);
       } catch (err) {
         alert('Грешка при връзка със сървъра.');
       }
@@ -375,9 +468,9 @@
       projectSelect.disabled = false;
     });
     refresh();
-    setInterval(function () { if (!editingCommentId) refresh(); }, 15000);
+    setInterval(function () { if (!editingCommentId && !editingPendingId) refresh(); }, 15000);
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible' && !editingCommentId) refresh();
+      if (document.visibilityState === 'visible' && !editingCommentId && !editingPendingId) refresh();
     });
   </script>
 </body>
