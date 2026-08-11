@@ -16,6 +16,7 @@
     <div class="tabs">
       <button type="button" class="tab-btn active" id="tabDashboard">Табло</button>
       <button type="button" class="tab-btn" id="tabProjects">Проекти</button>
+      <button type="button" class="tab-btn" id="tabCalendar">Календар</button>
     </div>
     <div id="dashboardView">
       <div class="card">
@@ -24,9 +25,12 @@
           <input type="text" id="newTaskText" placeholder="Описание на задачата...">
           <select id="newTaskWho"></select>
           <select id="newTaskProject"></select>
+          <label class="date-field">От <input type="date" id="newTaskStart"></label>
+          <label class="date-field">До <input type="date" id="newTaskEnd"></label>
           <label class="important-check"><input type="checkbox" id="newTaskImportant"> Важна</label>
           <button class="btn-primary" id="addBtn">Добави</button>
         </div>
+        <p class="sub-note" style="padding-top:0;">Трябва да избереш поне начална или крайна дата.</p>
       </div>
       <div class="card important-card" id="importantCard"></div>
       <div class="card pending-card" id="approvalCard"></div>
@@ -49,6 +53,17 @@
           </select>
         </div>
         <div id="projectTaskList"><div class="empty">Избери проект отгоре, за да видиш задачите му.</div></div>
+      </div>
+    </div>
+    <div id="calendarView" style="display:none;">
+      <div class="card">
+        <h2>Календар</h2>
+        <div class="calendar-nav">
+          <button type="button" class="btn-ghost" id="calPrev">‹ Предишен</button>
+          <span class="calendar-label" id="calLabel"></span>
+          <button type="button" class="btn-ghost" id="calNext">Следващ ›</button>
+        </div>
+        <div id="calendarGrid"></div>
       </div>
     </div>
   </div>
@@ -82,6 +97,8 @@
     let editingCommentId = null;
     let selectedProject = '';
     let projectSort = 'activity';
+    let calYear = (new Date()).getFullYear();
+    let calMonth = (new Date()).getMonth();
     const openComments = new Set();
     const commentDrafts = {};
 
@@ -228,6 +245,8 @@
         '<input type="text" class="edit-text" value="' + esc(t.text) + '">' +
         '<select class="edit-assignee">' + peopleOptions(t.assignee) + '</select>' +
         '<select class="edit-project">' + projectOptions(t.project) + '</select>' +
+        '<label class="date-field">От <input type="date" class="edit-start" value="' + esc(t.startDate || '') + '"></label>' +
+        '<label class="date-field">До <input type="date" class="edit-end" value="' + esc(t.endDate || '') + '"></label>' +
         '<label class="important-check"><input type="checkbox" class="edit-important"' + (t.important ? ' checked' : '') + '> Важна</label>' +
         '<button class="btn-primary edit-save" data-id="' + esc(t.id) + '">Запази</button>' +
         '<button class="btn-ghost edit-cancel" data-id="' + esc(t.id) + '">Отказ</button>' +
@@ -397,6 +416,78 @@
       listEl.innerHTML = html;
     }
 
+    const WEEKDAY_NAMES = ['Пон', 'Вт', 'Ср', 'Чет', 'Пет', 'Съб', 'Нед'];
+    const MONTH_NAMES = ['Януари', 'Февруари', 'Март', 'Април', 'Май', 'Юни', 'Юли', 'Август', 'Септември', 'Октомври', 'Ноември', 'Декември'];
+
+    // ISO 8601 номер на седмицата (понеделник е първи ден, седмица 1 е тази,
+    // която съдържа първия четвъртък на годината).
+    function isoWeekNumber(date) {
+      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      const dayNum = (d.getUTCDay() + 6) % 7;
+      d.setUTCDate(d.getUTCDate() - dayNum + 3);
+      const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+      const firstDayNum = (firstThursday.getUTCDay() + 6) % 7;
+      firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
+      return 1 + Math.round((d - firstThursday) / (7 * 24 * 3600 * 1000));
+    }
+
+    function dateKey(y, m, d) {
+      return y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    }
+
+    // Задача с и начална, и крайна дата се показва във всеки ден от диапазона;
+    // със само едната дата — само на нея.
+    function tasksForDay(key) {
+      return data.filter(function (t) {
+        if (t.startDate && t.endDate) return key >= t.startDate && key <= t.endDate;
+        if (t.startDate) return key === t.startDate;
+        if (t.endDate) return key === t.endDate;
+        return false;
+      });
+    }
+
+    function renderCalendar() {
+      const label = document.getElementById('calLabel');
+      if (label) label.textContent = MONTH_NAMES[calMonth] + ' ' + calYear;
+      const grid = document.getElementById('calendarGrid');
+      if (!grid) return;
+
+      const firstOfMonth = new Date(calYear, calMonth, 1);
+      const startOffset = (firstOfMonth.getDay() + 6) % 7; // понеделник = 0
+      const gridStart = new Date(calYear, calMonth, 1 - startOffset);
+      const today = new Date();
+      const todayKey = dateKey(today.getFullYear(), today.getMonth(), today.getDate());
+
+      let html = '<div class="calendar-row calendar-weekdays"><div class="calendar-week-label"></div>' +
+        WEEKDAY_NAMES.map(function (n) { return '<div class="calendar-weekday">' + n + '</div>'; }).join('') +
+        '</div>';
+
+      for (let w = 0; w < 6; w++) {
+        const weekFirstDate = new Date(gridStart);
+        weekFirstDate.setDate(gridStart.getDate() + w * 7);
+        const weekNum = isoWeekNumber(weekFirstDate);
+        html += '<div class="calendar-row"><div class="calendar-week-label" title="Седмица">' + weekNum + '</div>';
+        for (let d = 0; d < 7; d++) {
+          const cellDate = new Date(gridStart);
+          cellDate.setDate(gridStart.getDate() + w * 7 + d);
+          const key = dateKey(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate());
+          const inMonth = cellDate.getMonth() === calMonth;
+          const isToday = key === todayKey;
+          const dayTasks = tasksForDay(key);
+          html += '<div class="calendar-cell' + (inMonth ? '' : ' calendar-cell-out') + (isToday ? ' calendar-cell-today' : '') + '">' +
+            '<div class="calendar-daynum">' + cellDate.getDate() + '</div>' +
+            '<div class="calendar-tasks">' + dayTasks.map(function (t) {
+              // краен ден (независимо дали има и начална дата) — оцветява се в червено
+              const isDeadline = !!(t.endDate && key === t.endDate);
+              return '<div class="calendar-task' + (isDeadline ? ' calendar-task-deadline' : '') + '" title="' + esc(t.text) + '">' + esc(t.text) + '</div>';
+            }).join('') + '</div>' +
+          '</div>';
+        }
+        html += '</div>';
+      }
+      grid.innerHTML = html;
+    }
+
     function attachHandlers() {
       document.querySelectorAll('.chk').forEach(function (cb) {
         cb.addEventListener('change', function () { toggle(cb.getAttribute('data-id'), cb.checked); });
@@ -439,24 +530,32 @@
           const textInput = li.querySelector('.edit-text');
           const assigneeSelect = li.querySelector('.edit-assignee');
           const projectSelect = li.querySelector('.edit-project');
+          const startInput = li.querySelector('.edit-start');
+          const endInput = li.querySelector('.edit-end');
           const importantCb = li.querySelector('.edit-important');
           const text = textInput.value.trim();
           const assignee = assigneeSelect.value;
           const project = projectSelect.value;
+          const startDate = startInput.value;
+          const endDate = endInput.value;
           if (!text) return;
           btn.disabled = true;
           btn.textContent = 'Запазва се...';
           textInput.disabled = true;
           assigneeSelect.disabled = true;
           projectSelect.disabled = true;
+          startInput.disabled = true;
+          endInput.disabled = true;
           importantCb.disabled = true;
-          await editTask(btn.getAttribute('data-id'), text, assignee, importantCb.checked, project);
+          await editTask(btn.getAttribute('data-id'), text, assignee, importantCb.checked, project, startDate, endDate);
           if (document.body.contains(btn)) {
             btn.disabled = false;
             btn.textContent = 'Запази';
             textInput.disabled = false;
             assigneeSelect.disabled = false;
             projectSelect.disabled = false;
+            startInput.disabled = false;
+            endInput.disabled = false;
             importantCb.disabled = false;
           }
         });
@@ -578,6 +677,7 @@
       renderActive();
       renderDone();
       renderProjectsView();
+      renderCalendar();
       attachHandlers();
     }
 
@@ -595,10 +695,13 @@
       const text = document.getElementById('newTaskText').value.trim();
       const who = document.getElementById('newTaskWho').value;
       const project = document.getElementById('newTaskProject').value;
+      const startDate = document.getElementById('newTaskStart').value;
+      const endDate = document.getElementById('newTaskEnd').value;
       const important = document.getElementById('newTaskImportant').checked;
       if (!text) return;
+      if (!startDate && !endDate) { alert('Избери поне начална или крайна дата.'); return; }
       try {
-        const res = await apiPost('addTask', { text: text, assignee: who, important: important, project: project });
+        const res = await apiPost('addTask', { text: text, assignee: who, important: important, project: project, startDate: startDate, endDate: endDate });
         if (res.ok === false) { onError({ message: res.error }); return; }
         const created = (res.tasks || []).find(function (t) { return t.text === text && t.assignee === who; });
         if (created) markTaskOpened(created);
@@ -606,12 +709,14 @@
         document.getElementById('newTaskText').value = '';
         document.getElementById('newTaskImportant').checked = false;
         document.getElementById('newTaskProject').value = '';
+        document.getElementById('newTaskStart').value = '';
+        document.getElementById('newTaskEnd').value = '';
       } catch (err) { onError(err); }
     }
 
-    async function editTask(id, text, assignee, important, project) {
+    async function editTask(id, text, assignee, important, project, startDate, endDate) {
       try {
-        const res = await apiPost('editTask', { id: id, text: text, assignee: assignee, important: important, project: project });
+        const res = await apiPost('editTask', { id: id, text: text, assignee: assignee, important: important, project: project, startDate: startDate, endDate: endDate });
         if (res.ok === false) { onError({ message: res.error }); return; }
         editingId = null;
         applyData(res);
@@ -716,35 +821,38 @@
       const input = document.getElementById('newTaskText');
       const importantCb = document.getElementById('newTaskImportant');
       const projectSelect = document.getElementById('newTaskProject');
+      const startInput = document.getElementById('newTaskStart');
+      const endInput = document.getElementById('newTaskEnd');
       btn.disabled = true;
       btn.textContent = 'Добавя се...';
       input.disabled = true;
       importantCb.disabled = true;
       projectSelect.disabled = true;
+      startInput.disabled = true;
+      endInput.disabled = true;
       await addTask();
       btn.disabled = false;
       btn.textContent = 'Добави';
       input.disabled = false;
       importantCb.disabled = false;
       projectSelect.disabled = false;
+      startInput.disabled = false;
+      endInput.disabled = false;
     });
     buildLinks();
 
-    const tabDashboard = document.getElementById('tabDashboard');
-    const tabProjects = document.getElementById('tabProjects');
-    const dashboardView = document.getElementById('dashboardView');
-    const projectsView = document.getElementById('projectsView');
-    tabDashboard.addEventListener('click', function () {
-      tabDashboard.classList.add('active');
-      tabProjects.classList.remove('active');
-      dashboardView.style.display = '';
-      projectsView.style.display = 'none';
-    });
-    tabProjects.addEventListener('click', function () {
-      tabProjects.classList.add('active');
-      tabDashboard.classList.remove('active');
-      dashboardView.style.display = 'none';
-      projectsView.style.display = '';
+    const tabs = [
+      { btn: document.getElementById('tabDashboard'), view: document.getElementById('dashboardView') },
+      { btn: document.getElementById('tabProjects'), view: document.getElementById('projectsView') },
+      { btn: document.getElementById('tabCalendar'), view: document.getElementById('calendarView') }
+    ];
+    tabs.forEach(function (tab) {
+      tab.btn.addEventListener('click', function () {
+        tabs.forEach(function (other) {
+          other.btn.classList.toggle('active', other === tab);
+          other.view.style.display = other === tab ? '' : 'none';
+        });
+      });
     });
     document.getElementById('projectSelect').innerHTML = '<option value="">— избери проект —</option>' +
       '<option value="' + NO_PROJECT_VALUE + '">— без проект —</option>' +
@@ -759,6 +867,17 @@
       renderProjectsView();
       attachHandlers();
     });
+    document.getElementById('calPrev').addEventListener('click', function () {
+      calMonth--;
+      if (calMonth < 0) { calMonth = 11; calYear--; }
+      renderCalendar();
+    });
+    document.getElementById('calNext').addEventListener('click', function () {
+      calMonth++;
+      if (calMonth > 11) { calMonth = 0; calYear++; }
+      renderCalendar();
+    });
+    renderCalendar();
 
     refresh();
 
