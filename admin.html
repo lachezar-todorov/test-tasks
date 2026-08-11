@@ -179,6 +179,24 @@
       return t.project ? '<span class="badge-project">' + esc(t.project) + '</span>' : '';
     }
 
+    function formatDisplayDate(iso) {
+      const parts = iso.split('-');
+      return parts[2] + '.' + parts[1] + '.' + parts[0];
+    }
+
+    function dateBadge(t) {
+      if (t.startDate && t.endDate) {
+        return '<span class="badge-date">' + esc(formatDisplayDate(t.startDate)) + ' – ' + esc(formatDisplayDate(t.endDate)) + '</span>';
+      }
+      if (t.startDate) {
+        return '<span class="badge-date">' + esc(formatDisplayDate(t.startDate)) + '</span>';
+      }
+      if (t.endDate) {
+        return '<span class="badge-date badge-date-deadline">Да се изпълни до: ' + esc(formatDisplayDate(t.endDate)) + '</span>';
+      }
+      return '';
+    }
+
     function commentsHtml(t) {
       const open = openComments.has(t.id);
       const list = (t.comments || []).map(function (c) {
@@ -248,6 +266,7 @@
         '<label class="date-field">От <input type="date" class="edit-start" value="' + esc(t.startDate || '') + '"></label>' +
         '<label class="date-field">До <input type="date" class="edit-end" value="' + esc(t.endDate || '') + '"></label>' +
         '<label class="important-check"><input type="checkbox" class="edit-important"' + (t.important ? ' checked' : '') + '> Важна</label>' +
+        '<label class="important-check"><input type="checkbox" class="edit-in-calendar"' + (t.inCalendar ? ' checked' : '') + '> Календар</label>' +
         '<button class="btn-primary edit-save" data-id="' + esc(t.id) + '">Запази</button>' +
         '<button class="btn-ghost edit-cancel" data-id="' + esc(t.id) + '">Отказ</button>' +
       '</div>';
@@ -275,6 +294,7 @@
               '<input type="checkbox" class="chk" data-id="' + esc(t.id) + '">' +
               importantBadge() +
               projectBadge(t) +
+              dateBadge(t) +
               taskTextHtml(t) +
               commentToggleBtn(t) +
               '<button class="btn-ghost" data-edit="' + esc(t.id) + '">✎</button>' +
@@ -301,6 +321,7 @@
               '<span class="badge-pending">Чака</span>' +
               (t.important ? importantBadge() : '') +
               projectBadge(t) +
+              dateBadge(t) +
               taskTextHtml(t, null, true) +
               markReadBtnHtml(t) +
               commentToggleBtn(t) +
@@ -327,6 +348,7 @@
             const row = t.id === editingId ? editRowHtml(t) :
               '<input type="checkbox" class="chk" data-id="' + esc(t.id) + '">' +
               projectBadge(t) +
+              dateBadge(t) +
               taskTextHtml(t) +
               commentToggleBtn(t) +
               '<button class="btn-ghost" data-edit="' + esc(t.id) + '">✎</button>' +
@@ -349,6 +371,7 @@
           return '<li data-id="' + esc(t.id) + '"><div class="task-row">' +
             '<input type="checkbox" class="chk" checked data-id="' + esc(t.id) + '">' +
             projectBadge(t) +
+            dateBadge(t) +
             taskTextHtml(t, 'task-text-done') +
             '<span class="task-assignee">' + esc(t.assignee) + '</span>' +
             commentToggleBtn(t) +
@@ -403,6 +426,7 @@
               ? '<span class="badge-pending">Чака</span>'
               : '<input type="checkbox" class="chk" ' + (isDone ? 'checked ' : '') + 'data-id="' + esc(t.id) + '">') +
             (t.important ? importantBadge() : '') +
+            dateBadge(t) +
             taskTextHtml(t, isDone ? 'task-text-done' : null, isPending) +
             (isPending ? markReadBtnHtml(t) : '') +
             commentToggleBtn(t) +
@@ -438,7 +462,10 @@
     // Задача с и начална, и крайна дата се показва във всеки ден от диапазона;
     // със само едната дата — само на нея.
     function tasksForDay(key) {
+      // задачите се показват в календара само след изрично включване от админ
+      // (чекбокс "Календар" при редакция) — датите сами по себе си не са достатъчни
       return data.filter(function (t) {
+        if (!t.inCalendar) return false;
         if (t.startDate && t.endDate) return key >= t.startDate && key <= t.endDate;
         if (t.startDate) return key === t.startDate;
         if (t.endDate) return key === t.endDate;
@@ -533,6 +560,7 @@
           const startInput = li.querySelector('.edit-start');
           const endInput = li.querySelector('.edit-end');
           const importantCb = li.querySelector('.edit-important');
+          const inCalendarCb = li.querySelector('.edit-in-calendar');
           const text = textInput.value.trim();
           const assignee = assigneeSelect.value;
           const project = projectSelect.value;
@@ -547,7 +575,8 @@
           startInput.disabled = true;
           endInput.disabled = true;
           importantCb.disabled = true;
-          await editTask(btn.getAttribute('data-id'), text, assignee, importantCb.checked, project, startDate, endDate);
+          inCalendarCb.disabled = true;
+          await editTask(btn.getAttribute('data-id'), text, assignee, importantCb.checked, project, startDate, endDate, inCalendarCb.checked);
           if (document.body.contains(btn)) {
             btn.disabled = false;
             btn.textContent = 'Запази';
@@ -557,6 +586,7 @@
             startInput.disabled = false;
             endInput.disabled = false;
             importantCb.disabled = false;
+            inCalendarCb.disabled = false;
           }
         });
       });
@@ -714,9 +744,9 @@
       } catch (err) { onError(err); }
     }
 
-    async function editTask(id, text, assignee, important, project, startDate, endDate) {
+    async function editTask(id, text, assignee, important, project, startDate, endDate, inCalendar) {
       try {
-        const res = await apiPost('editTask', { id: id, text: text, assignee: assignee, important: important, project: project, startDate: startDate, endDate: endDate });
+        const res = await apiPost('editTask', { id: id, text: text, assignee: assignee, important: important, project: project, startDate: startDate, endDate: endDate, inCalendar: inCalendar });
         if (res.ok === false) { onError({ message: res.error }); return; }
         editingId = null;
         applyData(res);
