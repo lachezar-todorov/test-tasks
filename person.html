@@ -10,6 +10,10 @@
   <div class="person-header">
     <img class="site-logo" src="logo.svg" alt="" onerror="this.style.display='none'">
   </div>
+  <div class="changelog-banner" id="changelogBanner" style="display:none;">
+    <div class="changelog-text">🆕 <strong>НОВО:</strong> Добавяне на проект към задача, задължително изискване на крайна или начална дата при създаване на задача, харесване на коментари и редактиране или изтриване на все още неодобрените задачи.</div>
+    <button type="button" class="btn-ghost" id="changelogDismiss">Прочетено</button>
+  </div>
   <div class="card person" style="margin:8px auto 0;">
     <h2 id="nameHeader">Задачи</h2>
     <p class="sub-note">Списъкът се обновява автоматично. Най-новите задачи са отгоре.</p>
@@ -545,6 +549,17 @@
       endInput.disabled = false;
       projectSelect.disabled = false;
     });
+    // Съобщение за новите функции — веднъж скрито (клик на "Скрий"), не се показва повече никога.
+    const CHANGELOG_KEY = 'changelogDismissed_v1';
+    const changelogBanner = document.getElementById('changelogBanner');
+    if (!localStorage.getItem(CHANGELOG_KEY)) {
+      changelogBanner.style.display = '';
+    }
+    document.getElementById('changelogDismiss').addEventListener('click', function () {
+      localStorage.setItem(CHANGELOG_KEY, '1');
+      changelogBanner.remove();
+    });
+
     refresh();
     setInterval(function () { if (!editingCommentId && !editingPendingId) refresh(); }, 15000);
     document.addEventListener('visibilitychange', function () {
