@@ -197,3 +197,7 @@ ul.tasks li:hover{background:#fafaf6;}
 .changelog-text{flex:1 1 260px;line-height:1.45;}
 .changelog-banner .btn-ghost{color:var(--teal-dark);flex-shrink:0;background:rgba(255,255,255,.55);}
 .changelog-banner .btn-ghost:hover{background:rgba(255,255,255,.85);}
+
+/* --- person.html: табове (Лично табло / Календар) --- */
+.person-wrap{max-width:1100px;margin:8px auto 0;padding:0 18px 40px;}
+.person-wrap .tabs{margin-bottom:14px;}
