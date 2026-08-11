@@ -154,6 +154,24 @@
       return t.project ? '<span class="badge-project">' + esc(t.project) + '</span>' : '';
     }
 
+    function formatDisplayDate(iso) {
+      const parts = iso.split('-');
+      return parts[2] + '.' + parts[1] + '.' + parts[0];
+    }
+
+    function dateBadge(t) {
+      if (t.startDate && t.endDate) {
+        return '<span class="badge-date">' + esc(formatDisplayDate(t.startDate)) + ' – ' + esc(formatDisplayDate(t.endDate)) + '</span>';
+      }
+      if (t.startDate) {
+        return '<span class="badge-date">' + esc(formatDisplayDate(t.startDate)) + '</span>';
+      }
+      if (t.endDate) {
+        return '<span class="badge-date badge-date-deadline">Да се изпълни до: ' + esc(formatDisplayDate(t.endDate)) + '</span>';
+      }
+      return '';
+    }
+
     function taskTextHtml(t) {
       const unread = isTaskUnread(t);
       return '<span class="task-text' + (unread ? ' task-text-unread' : '') + '">' +
@@ -195,6 +213,7 @@
         return '<li class="' + (t.important ? 'important-row' : '') + '" data-id="' + esc(t.id) + '"><div class="task-row">' +
           (t.important ? '<span class="badge-important">Важна</span>' : '') +
           projectBadge(t) +
+          dateBadge(t) +
           taskTextHtml(t) +
           markReadBtnHtml(t) +
           commentToggleBtn(t) +
