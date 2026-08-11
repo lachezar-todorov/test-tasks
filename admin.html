@@ -343,16 +343,20 @@
       return copy;
     }
 
+    const NO_PROJECT_VALUE = '__none__';
+
     function renderProjectsView() {
       const listEl = document.getElementById('projectTaskList');
       if (!selectedProject) {
         listEl.innerHTML = '<div class="empty">Избери проект отгоре, за да видиш задачите му.</div>';
         return;
       }
-      let rows = data.filter(function (t) { return t.project === selectedProject; });
+      let rows = selectedProject === NO_PROJECT_VALUE
+        ? data.filter(function (t) { return !t.project; })
+        : data.filter(function (t) { return t.project === selectedProject; });
       rows = sortProjectRows(rows, projectSort);
       if (!rows.length) {
-        listEl.innerHTML = '<div class="empty">Няма задачи за този проект.</div>';
+        listEl.innerHTML = '<div class="empty">' + (selectedProject === NO_PROJECT_VALUE ? 'Няма задачи без проект.' : 'Няма задачи за този проект.') + '</div>';
         return;
       }
       const g = groupByAssignee(rows);
@@ -715,6 +719,7 @@
       projectsView.style.display = '';
     });
     document.getElementById('projectSelect').innerHTML = '<option value="">— избери проект —</option>' +
+      '<option value="' + NO_PROJECT_VALUE + '">— без проект —</option>' +
       PROJECTS.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
     document.getElementById('projectSelect').addEventListener('change', function () {
       selectedProject = this.value;
