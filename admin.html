@@ -201,7 +201,8 @@
       const likedBy = c.likedBy || [];
       const count = likedBy.length;
       const mine = likedBy.indexOf('Админ') !== -1;
-      return '<button class="comment-like-btn' + (count > 0 ? ' comment-like-active' : '') + '" data-comment-like="' + esc(c.id) + '" title="' + (mine ? 'Махни харесване' : 'Хареса') + '">👍' + (count > 0 ? ' ' + count : '') + '</button>';
+      const cls = mine ? ' comment-like-mine' : (count > 0 ? ' comment-like-has' : '');
+      return '<button class="comment-like-btn' + cls + '" data-comment-like="' + esc(c.id) + '" title="' + (mine ? 'Махни харесване' : 'Хареса') + '">👍' + (count > 0 ? ' ' + count : '') + '</button>';
     }
 
     // fullCheck=true (само "Чакат одобрение"): удебелява и чисто нова задача
