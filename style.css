@@ -126,9 +126,16 @@ ul.tasks li:hover{background:#fafaf6;}
 .comment-edit-btn,.comment-delete-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0;}
 .comment-edit-btn:hover{color:var(--teal-dark);}
 .comment-delete-btn:hover{color:var(--red);}
+/* три отделни състояния на лайк бутона, за да е ясно НЕ само дали коментарът
+   е харесан, а конкретно ОТ КОГО спрямо теб:
+   - без клас: никой не го е харесал
+   - .comment-like-has: харесан е, но НЕ от теб (очертан кръгче — можеш и ти да го харесаш)
+   - .comment-like-mine: ти си го харесал (плътно оцветен — вече си дал своя лайк) */
 .comment-like-btn{background:transparent;border:1px solid transparent;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 8px;border-radius:20px;flex-shrink:0;transition:background .15s, color .15s, border-color .15s;vertical-align:middle;}
-.comment-like-btn:hover{background:var(--brand-cream);color:var(--brand-orange-dark);}
-.comment-like-active{background:var(--brand-cream);color:var(--brand-orange-dark);font-weight:700;border-color:var(--brand-orange);}
+.comment-like-btn:hover{border-color:var(--brand-orange);color:var(--brand-orange-dark);}
+.comment-like-has{background:transparent;color:var(--brand-orange-dark);border-color:var(--brand-orange);font-weight:600;}
+.comment-like-mine{background:var(--brand-orange);color:#fff;border-color:var(--brand-orange);font-weight:700;}
+.comment-like-mine:hover{background:var(--brand-orange-dark);border-color:var(--brand-orange-dark);color:#fff;}
 .comment-edit-row{display:flex;gap:6px;margin-top:2px;flex-wrap:wrap;}
 .comment-edit-row input[type=text]{flex:1 1 160px;padding:6px 8px;font-size:13px;}
 .comment-empty{color:var(--muted);font-size:12px;font-style:italic;}
