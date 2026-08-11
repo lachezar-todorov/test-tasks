@@ -16,9 +16,12 @@
     <div class="propose-row">
       <input type="text" id="newTaskText" placeholder="Предложи си задача...">
       <select id="newTaskProject"></select>
+      <label class="date-field">От <input type="date" id="newTaskStart"></label>
+      <label class="date-field">До <input type="date" id="newTaskEnd"></label>
       <label class="important-check"><input type="checkbox" id="newTaskImportant"> Важна</label>
       <button class="btn-primary" id="addBtn">Добави</button>
     </div>
+    <p class="sub-note" style="padding-top:0;">Трябва да избереш поне начална или крайна дата.</p>
     <div id="list"><div class="empty">Зареждане...</div></div>
   </div>
 
@@ -171,6 +174,8 @@
       return '<div class="task-row"><div class="edit-row">' +
         '<input type="text" class="edit-text" value="' + esc(t.text) + '">' +
         '<select class="edit-project">' + projectOptions(t.project) + '</select>' +
+        '<label class="date-field">От <input type="date" class="edit-start" value="' + esc(t.startDate || '') + '"></label>' +
+        '<label class="date-field">До <input type="date" class="edit-end" value="' + esc(t.endDate || '') + '"></label>' +
         '<label class="important-check"><input type="checkbox" class="edit-important"' + (t.important ? ' checked' : '') + '> Важна</label>' +
         '<button class="btn-primary pending-edit-save" data-id="' + esc(t.id) + '">Запази</button>' +
         '<button class="btn-ghost pending-edit-cancel" data-id="' + esc(t.id) + '">Отказ</button>' +
@@ -239,21 +244,30 @@
           const li = btn.closest('li');
           const textInput = li.querySelector('.edit-text');
           const projectSelect = li.querySelector('.edit-project');
+          const startInput = li.querySelector('.edit-start');
+          const endInput = li.querySelector('.edit-end');
           const importantCb = li.querySelector('.edit-important');
           const text = textInput.value.trim();
           const project = projectSelect.value;
+          const startDate = startInput.value;
+          const endDate = endInput.value;
           if (!text) return;
+          if (!startDate && !endDate) { alert('Избери поне начална или крайна дата.'); return; }
           btn.disabled = true;
           btn.textContent = 'Запазва се...';
           textInput.disabled = true;
           projectSelect.disabled = true;
+          startInput.disabled = true;
+          endInput.disabled = true;
           importantCb.disabled = true;
-          await editPendingTask(btn.getAttribute('data-id'), text, project, importantCb.checked);
+          await editPendingTask(btn.getAttribute('data-id'), text, project, importantCb.checked, startDate, endDate);
           if (document.body.contains(btn)) {
             btn.disabled = false;
             btn.textContent = 'Запази';
             textInput.disabled = false;
             projectSelect.disabled = false;
+            startInput.disabled = false;
+            endInput.disabled = false;
             importantCb.disabled = false;
           }
         });
@@ -375,10 +389,13 @@
       if (!text || !u) return;
       const important = document.getElementById('newTaskImportant').checked;
       const project = document.getElementById('newTaskProject').value;
+      const startDate = document.getElementById('newTaskStart').value;
+      const endDate = document.getElementById('newTaskEnd').value;
+      if (!startDate && !endDate) { alert('Избери поне начална или крайна дата.'); return; }
       try {
         const res = await fetch(API_URL, {
           method: 'POST',
-          body: JSON.stringify({ action: 'personAddTask', u: u, text: text, important: important, project: project })
+          body: JSON.stringify({ action: 'personAddTask', u: u, text: text, important: important, project: project, startDate: startDate, endDate: endDate })
         });
         const data = await res.json();
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
@@ -388,16 +405,18 @@
         document.getElementById('newTaskText').value = '';
         document.getElementById('newTaskImportant').checked = false;
         document.getElementById('newTaskProject').value = '';
+        document.getElementById('newTaskStart').value = '';
+        document.getElementById('newTaskEnd').value = '';
       } catch (err) {
         alert('Грешка при връзка със сървъра.');
       }
     }
 
-    async function editPendingTask(id, text, project, important) {
+    async function editPendingTask(id, text, project, important, startDate, endDate) {
       try {
         const res = await fetch(API_URL, {
           method: 'POST',
-          body: JSON.stringify({ action: 'personEditTask', u: u, id: id, text: text, project: project, important: important })
+          body: JSON.stringify({ action: 'personEditTask', u: u, id: id, text: text, project: project, important: important, startDate: startDate, endDate: endDate })
         });
         const data = await res.json();
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
@@ -489,16 +508,22 @@
       const input = document.getElementById('newTaskText');
       const importantCb = document.getElementById('newTaskImportant');
       const projectSelect = document.getElementById('newTaskProject');
+      const startInput = document.getElementById('newTaskStart');
+      const endInput = document.getElementById('newTaskEnd');
       btn.disabled = true;
       btn.textContent = 'Добавя се...';
       input.disabled = true;
       importantCb.disabled = true;
       projectSelect.disabled = true;
+      startInput.disabled = true;
+      endInput.disabled = true;
       await addTask();
       btn.disabled = false;
       btn.textContent = 'Добави';
       input.disabled = false;
       importantCb.disabled = false;
+      startInput.disabled = false;
+      endInput.disabled = false;
       projectSelect.disabled = false;
     });
     refresh();
