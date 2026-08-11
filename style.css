@@ -191,3 +191,9 @@ ul.tasks li:hover{background:#fafaf6;}
 .calendar-tasks{display:flex;flex-direction:column;gap:2px;}
 .calendar-task{background:var(--teal-soft);color:var(--teal-dark);border-radius:4px;padding:1px 5px;font-size:10.5px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .calendar-task-deadline{background:#f6dcd8;color:var(--red);font-weight:700;}
+
+/* --- съобщение за нови функции (може да се скрие завинаги) --- */
+.changelog-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;max-width:760px;margin:14px auto 0;background:var(--teal-soft);border:1px solid var(--teal);border-radius:var(--radius);padding:12px 18px;font-size:13.5px;color:var(--teal-dark);flex-wrap:wrap;}
+.changelog-text{flex:1 1 260px;line-height:1.45;}
+.changelog-banner .btn-ghost{color:var(--teal-dark);flex-shrink:0;background:rgba(255,255,255,.55);}
+.changelog-banner .btn-ghost:hover{background:rgba(255,255,255,.85);}
