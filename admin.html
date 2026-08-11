@@ -115,26 +115,10 @@
       saveSeenComments();
     }
 
-    // "Лайк" на коментар — чисто визуален отпечатък, само в localStorage.
-    // Никога не се праща към сървъра, не пипа датата на коментара и
-    // затова не влияе на подредбата по активност — служи единствено като
-    // видим начин да отбележиш, че си видял/прочел коментара.
-    const LIKED_COMMENTS_KEY = 'likedComments_admin';
-    let likedComments;
-    try { likedComments = new Set(JSON.parse(localStorage.getItem(LIKED_COMMENTS_KEY) || '[]')); }
-    catch (e) { likedComments = new Set(); }
-    function saveLikedComments() { localStorage.setItem(LIKED_COMMENTS_KEY, JSON.stringify(Array.from(likedComments))); }
-    function isLiked(id) { return likedComments.has(id); }
-    function toggleCommentLike(id) {
-      if (likedComments.has(id)) {
-        likedComments.delete(id);
-      } else {
-        likedComments.add(id);
-        markCommentSeen(id);
-      }
-      saveLikedComments();
-    }
-
+    // "Лайк" на коментар — пази се в листа "Коментари" (колона "Харесано от"),
+    // за да го вижда и другата страна (админ вижда че личен потребител е
+    // харесал негов коментар, и обратно). Никога не пипа датата на коментара,
+    // затова не влияе на подредбата по активност.
     function esc(s) {
       return String(s).replace(/[&<>"']/g, function (c) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -188,7 +172,7 @@
             '<button class="btn-primary comment-edit-save" data-comment="' + esc(c.id) + '">Запази</button>' +
             '<button class="btn-ghost comment-edit-cancel" data-comment="' + esc(c.id) + '">Отказ</button></div>'
           : '<div class="comment-text"><span class="comment-text-value">' + esc(c.text) +
-              ' <button class="comment-like-btn' + (isLiked(c.id) ? ' comment-like-active' : '') + '" data-comment-like="' + esc(c.id) + '" title="Хареса">👍</button></span>' +
+              ' ' + commentLikeBtnHtml(c) + '</span>' +
             '<div class="comment-actions">' +
               '<button class="comment-edit-btn" data-comment="' + esc(c.id) + '" title="Редактирай">✎</button>' +
               '<button class="comment-delete-btn" data-comment="' + esc(c.id) + '" title="Изтрий">🗑</button>' +
@@ -211,6 +195,13 @@
       const n = (t.comments || []).length;
       const unread = (t.comments || []).some(isUnread);
       return '<button class="btn-ghost comment-toggle' + (unread ? ' comment-toggle-unread' : '') + '" data-toggle="' + esc(t.id) + '">💬 ' + n + '</button>';
+    }
+
+    function commentLikeBtnHtml(c) {
+      const likedBy = c.likedBy || [];
+      const count = likedBy.length;
+      const mine = likedBy.indexOf('Админ') !== -1;
+      return '<button class="comment-like-btn' + (count > 0 ? ' comment-like-active' : '') + '" data-comment-like="' + esc(c.id) + '" title="' + (mine ? 'Махни харесване' : 'Хареса') + '">👍' + (count > 0 ? ' ' + count : '') + '</button>';
     }
 
     // fullCheck=true (само "Чакат одобрение"): удебелява и чисто нова задача
@@ -498,9 +489,9 @@
         });
       });
       document.querySelectorAll('[data-comment-like]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          toggleCommentLike(btn.getAttribute('data-comment-like'));
-          render();
+        btn.addEventListener('click', async function () {
+          btn.disabled = true;
+          await toggleCommentLike(btn.getAttribute('data-comment-like'));
         });
       });
       document.querySelectorAll('.comment-input').forEach(function (input) {
@@ -668,6 +659,15 @@
         const res = await apiPost('editComment', { commentId: commentId, text: text });
         if (res.ok === false) { onError({ message: res.error }); return; }
         editingCommentId = null;
+        applyData(res);
+      } catch (err) { onError(err); }
+    }
+
+    async function toggleCommentLike(commentId) {
+      try {
+        const res = await apiPost('toggleCommentLike', { commentId: commentId });
+        if (res.ok === false) { onError({ message: res.error }); return; }
+        markCommentSeen(commentId);
         applyData(res);
       } catch (err) { onError(err); }
     }
