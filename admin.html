@@ -28,6 +28,7 @@
           <label class="date-field">От <input type="date" id="newTaskStart"></label>
           <label class="date-field">До <input type="date" id="newTaskEnd"></label>
           <label class="important-check"><input type="checkbox" id="newTaskImportant"> Важна</label>
+          <label class="important-check"><input type="checkbox" id="newTaskInCalendar"> Календар</label>
           <button class="btn-primary" id="addBtn">Добави</button>
         </div>
         <p class="sub-note" style="padding-top:0;">Трябва да избереш поне начална или крайна дата.</p>
@@ -899,16 +900,18 @@
       const startDate = document.getElementById('newTaskStart').value;
       const endDate = document.getElementById('newTaskEnd').value;
       const important = document.getElementById('newTaskImportant').checked;
+      const inCalendar = document.getElementById('newTaskInCalendar').checked;
       if (!text) return;
       if (!startDate && !endDate) { alert('Избери поне начална или крайна дата.'); return; }
       try {
-        const res = await apiPost('addTask', { text: text, assignee: who, important: important, project: project, startDate: startDate, endDate: endDate });
+        const res = await apiPost('addTask', { text: text, assignee: who, important: important, project: project, startDate: startDate, endDate: endDate, inCalendar: inCalendar });
         if (res.ok === false) { onError({ message: res.error }); return; }
         const created = (res.tasks || []).find(function (t) { return t.text === text && t.assignee === who; });
         if (created) markTaskOpened(created);
         applyData(res);
         document.getElementById('newTaskText').value = '';
         document.getElementById('newTaskImportant').checked = false;
+        document.getElementById('newTaskInCalendar').checked = false;
         document.getElementById('newTaskProject').value = '';
         document.getElementById('newTaskStart').value = '';
         document.getElementById('newTaskEnd').value = '';
@@ -1021,6 +1024,7 @@
       const btn = document.getElementById('addBtn');
       const input = document.getElementById('newTaskText');
       const importantCb = document.getElementById('newTaskImportant');
+      const inCalendarCb = document.getElementById('newTaskInCalendar');
       const projectSelect = document.getElementById('newTaskProject');
       const startInput = document.getElementById('newTaskStart');
       const endInput = document.getElementById('newTaskEnd');
@@ -1028,6 +1032,7 @@
       btn.textContent = 'Добавя се...';
       input.disabled = true;
       importantCb.disabled = true;
+      inCalendarCb.disabled = true;
       projectSelect.disabled = true;
       startInput.disabled = true;
       endInput.disabled = true;
@@ -1036,6 +1041,7 @@
       btn.textContent = 'Добави';
       input.disabled = false;
       importantCb.disabled = false;
+      inCalendarCb.disabled = false;
       projectSelect.disabled = false;
       startInput.disabled = false;
       endInput.disabled = false;
