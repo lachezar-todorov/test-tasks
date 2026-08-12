@@ -216,11 +216,11 @@ ul.tasks li:hover{background:#fafaf6;}
 
 .day-task-row{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);}
 .day-task-row:last-child{border-bottom:none;}
-.day-task-line{width:4px;border-radius:3px;background:var(--steel);flex-shrink:0;}
+.day-task-line{width:4px;border-radius:3px;background:var(--teal-dark);flex-shrink:0;}
 .day-task-line.day-task-line-deadline{background:var(--red);}
 .day-task-main{flex:1;min-width:0;cursor:default;}
 .day-task-main.day-task-clickable{cursor:pointer;}
-.day-task-time{font-size:12px;font-weight:700;color:var(--steel);}
+.day-task-time{font-size:12px;font-weight:700;color:var(--teal-dark);}
 .day-task-time.day-task-time-deadline{color:var(--red);}
 .day-task-assignee{font-size:11px;color:var(--muted);margin-left:6px;font-weight:600;}
 .day-task-text{margin-top:3px;font-size:14.5px;color:var(--ink);white-space:pre-wrap;word-break:break-word;}
