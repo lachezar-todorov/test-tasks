@@ -499,10 +499,36 @@
       return timed.concat(untimed);
     }
 
+    // 24-часов избор на час чрез два падащи списъка (часове/минути) — избягва
+    // нативния <input type="time">, чийто AM/PM или 24-часов формат зависи от
+    // локала на браузъра/устройството, а не от нас.
+    function timeSelectHtml(cls, value) {
+      const parts = String(value || '').split(':');
+      const h = parts[0] || '';
+      const m = parts[1] || '';
+      let hOpts = '<option value="">—</option>';
+      for (let i = 0; i < 24; i++) {
+        const v = String(i).padStart(2, '0');
+        hOpts += '<option value="' + v + '"' + (v === h ? ' selected' : '') + '>' + v + '</option>';
+      }
+      let mOpts = '';
+      for (let i = 0; i < 60; i++) {
+        const v = String(i).padStart(2, '0');
+        mOpts += '<option value="' + v + '"' + (v === m ? ' selected' : '') + '>' + v + '</option>';
+      }
+      return '<span class="time-select"><select class="' + cls + '-h">' + hOpts + '</select><span class="time-sep">:</span><select class="' + cls + '-m">' + mOpts + '</select></span>';
+    }
+
+    function readTimeSelect(cls, root) {
+      const h = root.querySelector('.' + cls + '-h').value;
+      const m = root.querySelector('.' + cls + '-m').value;
+      return h ? (h + ':' + (m || '00')) : '';
+    }
+
     function scheduleFormHtmlPerson(t) {
       return '<div class="schedule-form">' +
-        '<label>Начален час<input type="time" class="schedule-time" value="' + esc(t.time || '') + '"></label>' +
-        '<label>Краен час (по желание)<input type="time" class="schedule-time-end" value="' + esc(t.timeEnd || '') + '"></label>' +
+        '<label>Начален час' + timeSelectHtml('schedule-time', t.time) + '</label>' +
+        '<label>Краен час (по желание)' + timeSelectHtml('schedule-time-end', t.timeEnd) + '</label>' +
         '<div class="schedule-form-note"><label>Бележка</label><textarea class="schedule-note" placeholder="Бележка към задачата...">' + esc(t.note || '') + '</textarea></div>' +
         '<div class="schedule-form-actions">' +
           '<button type="button" class="btn-ghost schedule-cancel">Отказ</button>' +
@@ -519,7 +545,7 @@
       return '<div class="day-task-row">' +
         '<div class="day-task-line' + (isDeadline ? ' day-task-line-deadline' : '') + '"></div>' +
         '<div class="day-task-main' + (canEdit && !editing ? ' day-task-clickable' : '') + '"' + (canEdit && !editing ? ' data-day-task-open="' + esc(t.id) + '"' : '') + '>' +
-          '<span class="day-task-time' + (isDeadline ? ' day-task-time-deadline' : '') + (timeLabel ? '' : ' day-task-time-empty') + '">' + (timeLabel ? esc(timeLabel) : 'Без час') + '</span>' +
+          (timeLabel ? '<span class="day-task-time' + (isDeadline ? ' day-task-time-deadline' : '') + '">' + esc(timeLabel) + '</span>' : '') +
           '<span class="day-task-assignee">' + esc(t.assignee) + '</span>' +
           '<div class="day-task-text">' + esc(t.text) + '</div>' +
           (t.note ? '<div class="day-task-note">' + esc(t.note) + '</div>' : '') +
@@ -572,8 +598,8 @@
       body.querySelectorAll('.schedule-save').forEach(function (btn) {
         btn.addEventListener('click', async function () {
           const row = btn.closest('.day-task-main');
-          const time = row.querySelector('.schedule-time').value;
-          const timeEnd = row.querySelector('.schedule-time-end').value;
+          const time = readTimeSelect('schedule-time', row);
+          const timeEnd = readTimeSelect('schedule-time-end', row);
           const note = row.querySelector('.schedule-note').value;
           if (timeEnd && !time) { alert('Избери начален час, преди да зададеш краен.'); return; }
           btn.disabled = true;
