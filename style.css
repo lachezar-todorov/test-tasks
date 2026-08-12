@@ -222,7 +222,6 @@ ul.tasks li:hover{background:#fafaf6;}
 .day-task-main.day-task-clickable{cursor:pointer;}
 .day-task-time{font-size:12px;font-weight:700;color:var(--steel);}
 .day-task-time.day-task-time-deadline{color:var(--red);}
-.day-task-time-empty{color:var(--muted);font-weight:600;}
 .day-task-assignee{font-size:11px;color:var(--muted);margin-left:6px;font-weight:600;}
 .day-task-text{margin-top:3px;font-size:14.5px;color:var(--ink);white-space:pre-wrap;word-break:break-word;}
 .day-task-note{margin-top:5px;font-size:12.5px;color:var(--muted);font-style:italic;white-space:pre-wrap;word-break:break-word;}
@@ -232,7 +231,9 @@ ul.tasks li:hover{background:#fafaf6;}
 
 .schedule-form{margin-top:10px;padding:12px;background:#f7f5ee;border-radius:10px;display:flex;flex-wrap:wrap;gap:8px 10px;align-items:flex-end;}
 .schedule-form label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);}
-.schedule-form input[type=time]{padding:8px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fff;color:var(--ink);}
+.time-select{display:flex;align-items:center;gap:3px;}
+.time-select select{padding:8px 4px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fff;color:var(--ink);}
+.time-select .time-sep{color:var(--muted);font-weight:700;}
 .schedule-form textarea{width:100%;min-height:60px;padding:8px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13px;resize:vertical;background:#fff;color:var(--ink);}
 .schedule-form .schedule-form-note{flex:1 1 100%;display:flex;flex-direction:column;gap:3px;}
 .schedule-form .schedule-form-actions{display:flex;gap:8px;margin-left:auto;}
