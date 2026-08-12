@@ -27,8 +27,10 @@
           <select id="newTaskProject"></select>
           <label class="date-field">От <input type="date" id="newTaskStart"></label>
           <label class="date-field">До <input type="date" id="newTaskEnd"></label>
-          <label class="important-check"><input type="checkbox" id="newTaskImportant"> Важна</label>
-          <label class="important-check"><input type="checkbox" id="newTaskInCalendar"> Календар</label>
+          <span class="check-pair">
+            <label class="important-check"><input type="checkbox" id="newTaskImportant"> Важна</label>
+            <label class="important-check"><input type="checkbox" id="newTaskInCalendar"> Календар</label>
+          </span>
           <button class="btn-primary" id="addBtn">Добави</button>
         </div>
         <p class="sub-note" style="padding-top:0;">Трябва да избереш поне начална или крайна дата.</p>
@@ -73,7 +75,10 @@
     <div class="modal-dialog modal-dialog-wide">
       <div class="modal-header">
         <h2 id="dayModalTitle"></h2>
-        <button type="button" class="modal-close" id="dayModalClose">✕</button>
+        <div class="modal-header-actions">
+          <button type="button" class="btn-ghost" id="dayModalExportBtn">Изтегли задачи</button>
+          <button type="button" class="modal-close" id="dayModalClose">✕</button>
+        </div>
       </div>
       <div class="modal-body" id="dayModalBody"></div>
     </div>
@@ -999,6 +1004,33 @@
       } catch (err) { onError(err); }
     }
 
+    async function exportDayTasks() {
+      if (!dayModalKey) return;
+      const btn = document.getElementById('dayModalExportBtn');
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Подготвя се...';
+      try {
+        const res = await apiPost('exportDayTasks', { date: dayModalKey });
+        if (res.ok === false) { onError({ message: res.error }); return; }
+        const binary = atob(res.base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = res.filename || 'zadachi.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) { onError(err); } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    }
+
     function buildLinks() {
       const base = location.origin + location.pathname.replace('admin.html', '');
       const list = document.getElementById('linksList');
@@ -1096,6 +1128,7 @@
     document.getElementById('dayModalOverlay').addEventListener('click', function (e) {
       if (e.target === this) closeDayModal();
     });
+    document.getElementById('dayModalExportBtn').addEventListener('click', exportDayTasks);
 
     // автоматично опресняване — не пипа задача/коментар/час, който в момента се редактира
     setInterval(function () { if (!editingId && !editingCommentId && !scheduleEditingId) refresh(); }, 15000);
