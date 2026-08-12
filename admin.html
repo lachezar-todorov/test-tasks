@@ -37,8 +37,8 @@
       <div class="card" id="activeCard"></div>
       <div class="card" id="doneCard"></div>
       <div class="card">
-        <h2>Лични линкове — изпрати на всеки</h2>
-        <ul class="links" id="linksList"></ul>
+        <h2 class="collapsible-header collapsed" id="linksToggle">Лични линкове — изпрати на всеки<span class="collapse-arrow">▾</span></h2>
+        <ul class="links" id="linksList" style="display:none;"></ul>
       </div>
     </div>
     <div id="projectsView" style="display:none;">
@@ -870,6 +870,10 @@
       endInput.disabled = false;
     });
     buildLinks();
+    document.getElementById('linksToggle').addEventListener('click', function () {
+      const collapsed = this.classList.toggle('collapsed');
+      document.getElementById('linksList').style.display = collapsed ? 'none' : '';
+    });
 
     const tabs = [
       { btn: document.getElementById('tabDashboard'), view: document.getElementById('dashboardView') },
