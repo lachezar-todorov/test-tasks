@@ -57,6 +57,10 @@ body{
 .wrap .card{max-width:none;}
 .card.person{max-width:760px;}
 .card h2{margin:0;padding:15px 18px;font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--teal-dark);background:#fbfaf5;border-bottom:1px solid var(--line);}
+.collapsible-header{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;user-select:none;}
+.collapsible-header:hover{background:#f4f2e8;}
+.collapse-arrow{font-size:11px;transition:transform .15s;flex-shrink:0;}
+.collapsible-header.collapsed .collapse-arrow{transform:rotate(-90deg);}
 .card.person h2{font-size:23px;text-transform:none;letter-spacing:normal;padding:20px 20px 6px;font-weight:700;}
 .sub-note{margin:0;padding:0 20px 14px;color:var(--muted);font-size:13px;}
 .addrow{display:flex;gap:8px;padding:16px 18px;flex-wrap:wrap;}
