@@ -11,7 +11,7 @@
     <img class="site-logo" src="logo.svg" alt="" onerror="this.style.display='none'">
   </div>
   <div class="changelog-banner" id="changelogBanner" style="display:none;">
-    <div class="changelog-text">🆕 <strong>НОВО!</strong> Календар с начални/крайни дати на задачите, лайкове на коментари, и вече можеш сам да редактираш/триеш своите все още неодобрени задачи. Нова страница с Календар само за преглед!</div>
+    <div class="changelog-text">🆕 <strong>НОВО!</strong>Календар с начални/крайни дати на задачите, лайкове на коментари, и вече можеш сам да редактираш/триеш своите все още неодобрени задачи. Нова страница с Календар само за преглед!<</div>
     <button type="button" class="btn-ghost" id="changelogDismiss">Скрий</button>
   </div>
 
@@ -483,6 +483,35 @@
       renderCalendarPerson();
     }
 
+    // Apps Script понякога не отговаря навреме (бавен round-trip, timeout,
+    // или табът е бил минимизиран докато е чакал) и вместо JSON връща HTML
+    // грешка — това чупи res.json(). При такъв провал (или чиста мрежова
+    // грешка) опитваме автоматично още 2 пъти, с кратко изчакване между
+    // опитите, преди да предадем грешката нагоре към извикващия.
+    async function fetchJsonWithRetry(url, options, attempts) {
+      attempts = attempts || 3;
+      let lastErr;
+      for (let i = 0; i < attempts; i++) {
+        try {
+          const res = await fetch(url, options);
+          return await res.json();
+        } catch (err) {
+          lastErr = err;
+          if (i < attempts - 1) {
+            await new Promise(function (resolve) { setTimeout(resolve, 1500 * (i + 1)); });
+          }
+        }
+      }
+      throw lastErr;
+    }
+
+    async function apiPost(action, extra) {
+      return fetchJsonWithRetry(API_URL, {
+        method: 'POST',
+        body: JSON.stringify(Object.assign({ action: action, u: u }, extra || {}))
+      });
+    }
+
     async function refresh() {
       if (!u) {
         document.getElementById('list').innerHTML = '<div class="empty">Липсва личен код в адреса.</div>';
@@ -490,8 +519,7 @@
         return;
       }
       try {
-        const res = await fetch(API_URL + '?action=tasks&u=' + encodeURIComponent(u));
-        const data = await res.json();
+        const data = await fetchJsonWithRetry(API_URL + '?action=tasks&u=' + encodeURIComponent(u));
         if (data.ok === false) {
           document.getElementById('list').innerHTML = '<div class="empty">' + esc(data.error || 'Грешка.') + '</div>';
           document.getElementById('pendingList').innerHTML = '';
@@ -514,11 +542,7 @@
       const endDate = document.getElementById('newTaskEnd').value;
       if (!startDate && !endDate) { alert('Избери поне начална или крайна дата.'); return; }
       try {
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'personAddTask', u: u, text: text, important: important, project: project, startDate: startDate, endDate: endDate })
-        });
-        const data = await res.json();
+        const data = await apiPost('personAddTask', { text: text, important: important, project: project, startDate: startDate, endDate: endDate });
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         const created = (data.pendingTasks || []).find(function (t) { return t.text === text; });
         if (created) markTaskOpened(created);
@@ -535,11 +559,7 @@
 
     async function editPendingTask(id, text, project, important, startDate, endDate) {
       try {
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'personEditTask', u: u, id: id, text: text, project: project, important: important, startDate: startDate, endDate: endDate })
-        });
-        const data = await res.json();
+        const data = await apiPost('personEditTask', { id: id, text: text, project: project, important: important, startDate: startDate, endDate: endDate });
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         editingPendingId = null;
         applyData(data);
@@ -551,11 +571,7 @@
     async function deletePendingTask(id) {
       if (!confirm('Да изтрия ли тази задача?')) return;
       try {
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'personDeleteTask', u: u, id: id })
-        });
-        const data = await res.json();
+        const data = await apiPost('personDeleteTask', { id: id });
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         applyData(data);
       } catch (err) {
@@ -565,11 +581,7 @@
 
     async function addComment(taskId, text) {
       try {
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'addComment', u: u, taskId: taskId, text: text })
-        });
-        const data = await res.json();
+        const data = await apiPost('addComment', { taskId: taskId, text: text });
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         delete commentDrafts[taskId];
         openComments.add(taskId);
@@ -581,11 +593,7 @@
 
     async function toggleCommentLike(commentId) {
       try {
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'toggleCommentLike', u: u, commentId: commentId })
-        });
-        const data = await res.json();
+        const data = await apiPost('toggleCommentLike', { commentId: commentId });
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         markCommentSeen(commentId);
         applyData(data);
@@ -596,11 +604,7 @@
 
     async function editComment(commentId, text) {
       try {
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'editComment', u: u, commentId: commentId, text: text })
-        });
-        const data = await res.json();
+        const data = await apiPost('editComment', { commentId: commentId, text: text });
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         editingCommentId = null;
         applyData(data);
@@ -611,11 +615,7 @@
 
     async function deleteComment(commentId) {
       try {
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'deleteComment', u: u, commentId: commentId })
-        });
-        const data = await res.json();
+        const data = await apiPost('deleteComment', { commentId: commentId });
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         applyData(data);
       } catch (err) {
