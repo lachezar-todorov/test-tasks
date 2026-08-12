@@ -68,6 +68,16 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="dayModalOverlay" style="display:none;">
+    <div class="modal-dialog modal-dialog-wide">
+      <div class="modal-header">
+        <h2 id="dayModalTitle"></h2>
+        <button type="button" class="modal-close" id="dayModalClose">✕</button>
+      </div>
+      <div class="modal-body" id="dayModalBody"></div>
+    </div>
+  </div>
+
   <script src="config.js"></script>
   <script>
     const NAME_MAP = {
@@ -99,6 +109,8 @@
     let projectSort = 'activity';
     let calYear = (new Date()).getFullYear();
     let calMonth = (new Date()).getMonth();
+    let dayModalKey = null;
+    let scheduleEditingId = null;
     const openComments = new Set();
     const commentDrafts = {};
 
@@ -521,7 +533,7 @@
           const inMonth = cellDate.getMonth() === calMonth;
           const isToday = key === todayKey;
           const dayTasks = tasksForDay(key);
-          html += '<div class="calendar-cell' + (inMonth ? '' : ' calendar-cell-out') + (isToday ? ' calendar-cell-today' : '') + '">' +
+          html += '<div class="calendar-cell' + (inMonth ? '' : ' calendar-cell-out') + (isToday ? ' calendar-cell-today' : '') + '" data-day-key="' + key + '">' +
             '<div class="calendar-daynum">' + cellDate.getDate() + '</div>' +
             '<div class="calendar-tasks">' + dayTasks.map(function (t) {
               // краен ден (независимо дали има и начална дата) — оцветява се в червено
@@ -533,6 +545,116 @@
         html += '</div>';
       }
       grid.innerHTML = html;
+      grid.querySelectorAll('[data-day-key]').forEach(function (cell) {
+        cell.addEventListener('click', function () { openDayModal(cell.getAttribute('data-day-key')); });
+      });
+    }
+
+    function formatTimeLabel(t) {
+      if (!t.time) return '';
+      return t.timeEnd ? (t.time + ' - ' + t.timeEnd) : t.time;
+    }
+
+    // Задачите за деня, подредени по начален час (без час — накрая, в
+    // текущия им ред).
+    function sortedDayTasks(key) {
+      const tasks = tasksForDay(key);
+      const timed = tasks.filter(function (t) { return !!t.time; }).sort(function (a, b) { return a.time < b.time ? -1 : (a.time > b.time ? 1 : 0); });
+      const untimed = tasks.filter(function (t) { return !t.time; });
+      return timed.concat(untimed);
+    }
+
+    function scheduleFormHtml(t) {
+      return '<div class="schedule-form">' +
+        '<label>Начален час<input type="time" class="schedule-time" value="' + esc(t.time || '') + '"></label>' +
+        '<label>Краен час (по желание)<input type="time" class="schedule-time-end" value="' + esc(t.timeEnd || '') + '"></label>' +
+        '<div class="schedule-form-note"><label>Бележка</label><textarea class="schedule-note" placeholder="Бележка към задачата...">' + esc(t.note || '') + '</textarea></div>' +
+        '<div class="schedule-form-actions">' +
+          '<button type="button" class="btn-ghost schedule-cancel">Отказ</button>' +
+          '<button type="button" class="btn-primary schedule-save" data-id="' + esc(t.id) + '">Запази</button>' +
+        '</div>' +
+      '</div>';
+    }
+
+    function dayTaskRowHtml(t, key) {
+      const isDeadline = !!(t.endDate && key === t.endDate);
+      const timeLabel = formatTimeLabel(t);
+      const canEdit = true; // админ може винаги
+      const editing = scheduleEditingId === t.id;
+      return '<div class="day-task-row">' +
+        '<div class="day-task-line' + (isDeadline ? ' day-task-line-deadline' : '') + '"></div>' +
+        '<div class="day-task-main' + (canEdit && !editing ? ' day-task-clickable' : '') + '"' + (canEdit && !editing ? ' data-day-task-open="' + esc(t.id) + '"' : '') + '>' +
+          '<span class="day-task-time' + (isDeadline ? ' day-task-time-deadline' : '') + (timeLabel ? '' : ' day-task-time-empty') + '">' + (timeLabel ? esc(timeLabel) : 'Без час') + '</span>' +
+          '<span class="day-task-assignee">' + esc(t.assignee) + '</span>' +
+          '<div class="day-task-text">' + esc(t.text) + '</div>' +
+          (t.note ? '<div class="day-task-note">' + esc(t.note) + '</div>' : '') +
+          (editing ? scheduleFormHtml(t) : '') +
+        '</div>' +
+        (canEdit && !editing ? '<button type="button" class="day-task-edit-btn" data-day-task-open="' + esc(t.id) + '" title="Добави час и/или бележка">+</button>' : '') +
+      '</div>';
+    }
+
+    function openDayModal(key) {
+      dayModalKey = key;
+      scheduleEditingId = null;
+      renderDayModal();
+    }
+
+    function closeDayModal() {
+      dayModalKey = null;
+      scheduleEditingId = null;
+      renderDayModal();
+    }
+
+    function renderDayModal() {
+      const overlay = document.getElementById('dayModalOverlay');
+      if (!overlay) return;
+      if (!dayModalKey) { overlay.style.display = 'none'; return; }
+      overlay.style.display = '';
+      const d = parseDateOnly_local(dayModalKey);
+      document.getElementById('dayModalTitle').textContent = d ? (d.getDate() + ' ' + MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear()) : dayModalKey;
+      const tasks = sortedDayTasks(dayModalKey);
+      const body = document.getElementById('dayModalBody');
+      body.innerHTML = tasks.length
+        ? tasks.map(function (t) { return dayTaskRowHtml(t, dayModalKey); }).join('')
+        : '<div class="day-task-empty">Няма задачи в календара за този ден.</div>';
+      body.querySelectorAll('[data-day-task-open]').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+          if (e.target.closest('.schedule-form')) return;
+          scheduleEditingId = el.getAttribute('data-day-task-open');
+          renderDayModal();
+        });
+      });
+      body.querySelectorAll('.schedule-cancel').forEach(function (btn) {
+        btn.addEventListener('click', function () { scheduleEditingId = null; renderDayModal(); });
+      });
+      body.querySelectorAll('.schedule-save').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+          const row = btn.closest('.day-task-main');
+          const time = row.querySelector('.schedule-time').value;
+          const timeEnd = row.querySelector('.schedule-time-end').value;
+          const note = row.querySelector('.schedule-note').value;
+          if (timeEnd && !time) { alert('Избери начален час, преди да зададеш краен.'); return; }
+          btn.disabled = true;
+          btn.textContent = 'Запазва се...';
+          await saveTaskSchedule(btn.getAttribute('data-id'), time, timeEnd, note);
+        });
+      });
+    }
+
+    function parseDateOnly_local(key) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || ''));
+      if (!m) return null;
+      return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    }
+
+    async function saveTaskSchedule(id, time, timeEnd, note) {
+      try {
+        const res = await apiPost('setTaskSchedule', { id: id, time: time, timeEnd: timeEnd, note: note });
+        if (res.ok === false) { onError({ message: res.error }); return; }
+        scheduleEditingId = null;
+        applyData(res);
+      } catch (err) { onError(err); }
     }
 
     function attachHandlers() {
@@ -728,6 +850,7 @@
       renderDone();
       renderProjectsView();
       renderCalendar();
+      renderDayModal();
       attachHandlers();
     }
 
@@ -935,10 +1058,15 @@
 
     refresh();
 
-    // автоматично опресняване — не пипа задача/коментар, който в момента се редактира
-    setInterval(function () { if (!editingId && !editingCommentId) refresh(); }, 15000);
+    document.getElementById('dayModalClose').addEventListener('click', closeDayModal);
+    document.getElementById('dayModalOverlay').addEventListener('click', function (e) {
+      if (e.target === this) closeDayModal();
+    });
+
+    // автоматично опресняване — не пипа задача/коментар/час, който в момента се редактира
+    setInterval(function () { if (!editingId && !editingCommentId && !scheduleEditingId) refresh(); }, 15000);
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible' && !editingId && !editingCommentId) refresh();
+      if (document.visibilityState === 'visible' && !editingId && !editingCommentId && !scheduleEditingId) refresh();
     });
   </script>
 </body>
