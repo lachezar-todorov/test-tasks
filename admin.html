@@ -37,7 +37,7 @@
       <div class="card" id="activeCard"></div>
       <div class="card" id="doneCard"></div>
       <div class="card">
-        <h2 class="collapsible-header collapsed" id="linksToggle">Лични линкове — изпрати на всеки<span class="collapse-arrow">▾</span></h2>
+        <h2 class="collapsible-header collapsed" id="linksToggle">Лични линкове<span class="collapse-arrow">▾</span></h2>
         <ul class="links" id="linksList" style="display:none;"></ul>
       </div>
     </div>
@@ -142,20 +142,40 @@
       });
     }
 
+    // Apps Script понякога не отговаря навреме (бавен round-trip, timeout,
+    // или табът е бил минимизиран докато е чакал) и вместо JSON връща HTML
+    // грешка — това чупи res.json(). При такъв провал (или чиста мрежова
+    // грешка) опитваме автоматично още 2 пъти, с кратко изчакване между
+    // опитите, преди да предадем грешката нагоре към извикващия.
+    async function fetchJsonWithRetry(url, options, attempts) {
+      attempts = attempts || 3;
+      let lastErr;
+      for (let i = 0; i < attempts; i++) {
+        try {
+          const res = await fetch(url, options);
+          return await res.json();
+        } catch (err) {
+          lastErr = err;
+          if (i < attempts - 1) {
+            await new Promise(function (resolve) { setTimeout(resolve, 1500 * (i + 1)); });
+          }
+        }
+      }
+      throw lastErr;
+    }
+
     async function apiGet(action, extraParams) {
       const params = new URLSearchParams(Object.assign({ action: action, pin: pin }, extraParams || {}));
-      const res = await fetch(API_URL + '?' + params.toString());
-      return res.json();
+      return fetchJsonWithRetry(API_URL + '?' + params.toString());
     }
 
     // ВАЖНО: без header "Content-Type: application/json" — иначе браузърът
     // праща CORS preflight (OPTIONS), който Apps Script не поддържа.
     async function apiPost(action, extra) {
-      const res = await fetch(API_URL, {
+      return fetchJsonWithRetry(API_URL, {
         method: 'POST',
         body: JSON.stringify(Object.assign({ action: action, pin: pin }, extra || {}))
       });
-      return res.json();
     }
 
     function onError(err) {
