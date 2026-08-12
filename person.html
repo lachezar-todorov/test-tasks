@@ -11,7 +11,7 @@
     <img class="site-logo" src="logo.svg" alt="" onerror="this.style.display='none'">
   </div>
   <div class="changelog-banner" id="changelogBanner" style="display:none;">
-    <div class="changelog-text">🆕 <strong>НОВО! </strong>Календар с начални/крайни дати на задачите, лайкове на коментари, и вече можеш сам да редактираш/триеш своите все още неодобрени задачи. Нова страница с Календар само за преглед!</div>
+    <div class="changelog-text">🆕 <strong>НОВО!</strong> Календар с начални/крайни дати на задачите, лайкове на коментари, и вече можеш сам да редактираш/триеш своите все още неодобрени задачи. Нова страница с Календар само за преглед!</div>
     <button type="button" class="btn-ghost" id="changelogDismiss">Скрий</button>
   </div>
 
@@ -56,6 +56,16 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="dayModalOverlay" style="display:none;">
+    <div class="modal-dialog modal-dialog-wide">
+      <div class="modal-header">
+        <h2 id="dayModalTitle"></h2>
+        <button type="button" class="modal-close" id="dayModalClose">✕</button>
+      </div>
+      <div class="modal-body" id="dayModalBody"></div>
+    </div>
+  </div>
+
   <script src="config.js"></script>
   <script>
     const PROJECTS = [
@@ -84,6 +94,8 @@
     let lastSnapshot = null;
     let calYear = (new Date()).getFullYear();
     let calMonth = (new Date()).getMonth();
+    let dayModalKey = null;
+    let scheduleEditingId = null;
 
     // Две отделни нива на "прочетено": ниво коментар (маркира се само с клик
     // direktно върху него) и ниво задача (само "новото" на задачата — маха се
@@ -457,7 +469,7 @@
           const inMonth = cellDate.getMonth() === calMonth;
           const isToday = key === todayKey;
           const dayTasks = tasksForDayPerson(key);
-          html += '<div class="calendar-cell' + (inMonth ? '' : ' calendar-cell-out') + (isToday ? ' calendar-cell-today' : '') + '">' +
+          html += '<div class="calendar-cell' + (inMonth ? '' : ' calendar-cell-out') + (isToday ? ' calendar-cell-today' : '') + '" data-day-key="' + key + '">' +
             '<div class="calendar-daynum">' + cellDate.getDate() + '</div>' +
             '<div class="calendar-tasks">' + dayTasks.map(function (t) {
               const isDeadline = !!(t.endDate && key === t.endDate);
@@ -469,6 +481,115 @@
         html += '</div>';
       }
       grid.innerHTML = html;
+      grid.querySelectorAll('[data-day-key]').forEach(function (cell) {
+        cell.addEventListener('click', function () { openDayModal(cell.getAttribute('data-day-key')); });
+      });
+    }
+
+    function formatTimeLabel(t) {
+      if (!t.time) return '';
+      return t.timeEnd ? (t.time + ' - ' + t.timeEnd) : t.time;
+    }
+
+    // Задачите за деня, подредени по начален час (без час — накрая, в текущия им ред).
+    function sortedDayTasksPerson(key) {
+      const tasks = tasksForDayPerson(key);
+      const timed = tasks.filter(function (t) { return !!t.time; }).sort(function (a, b) { return a.time < b.time ? -1 : (a.time > b.time ? 1 : 0); });
+      const untimed = tasks.filter(function (t) { return !t.time; });
+      return timed.concat(untimed);
+    }
+
+    function scheduleFormHtmlPerson(t) {
+      return '<div class="schedule-form">' +
+        '<label>Начален час<input type="time" class="schedule-time" value="' + esc(t.time || '') + '"></label>' +
+        '<label>Краен час (по желание)<input type="time" class="schedule-time-end" value="' + esc(t.timeEnd || '') + '"></label>' +
+        '<div class="schedule-form-note"><label>Бележка</label><textarea class="schedule-note" placeholder="Бележка към задачата...">' + esc(t.note || '') + '</textarea></div>' +
+        '<div class="schedule-form-actions">' +
+          '<button type="button" class="btn-ghost schedule-cancel">Отказ</button>' +
+          '<button type="button" class="btn-primary schedule-save" data-id="' + esc(t.id) + '">Запази</button>' +
+        '</div>' +
+      '</div>';
+    }
+
+    function dayTaskRowHtmlPerson(t, key) {
+      const isDeadline = !!(t.endDate && key === t.endDate);
+      const timeLabel = formatTimeLabel(t);
+      const canEdit = t.assignee === myName; // само собствената задача
+      const editing = scheduleEditingId === t.id;
+      return '<div class="day-task-row">' +
+        '<div class="day-task-line' + (isDeadline ? ' day-task-line-deadline' : '') + '"></div>' +
+        '<div class="day-task-main' + (canEdit && !editing ? ' day-task-clickable' : '') + '"' + (canEdit && !editing ? ' data-day-task-open="' + esc(t.id) + '"' : '') + '>' +
+          '<span class="day-task-time' + (isDeadline ? ' day-task-time-deadline' : '') + (timeLabel ? '' : ' day-task-time-empty') + '">' + (timeLabel ? esc(timeLabel) : 'Без час') + '</span>' +
+          '<span class="day-task-assignee">' + esc(t.assignee) + '</span>' +
+          '<div class="day-task-text">' + esc(t.text) + '</div>' +
+          (t.note ? '<div class="day-task-note">' + esc(t.note) + '</div>' : '') +
+          (editing ? scheduleFormHtmlPerson(t) : '') +
+        '</div>' +
+        (canEdit && !editing ? '<button type="button" class="day-task-edit-btn" data-day-task-open="' + esc(t.id) + '" title="Добави час и/или бележка">+</button>' : '') +
+      '</div>';
+    }
+
+    function openDayModal(key) {
+      dayModalKey = key;
+      scheduleEditingId = null;
+      renderDayModal();
+    }
+
+    function closeDayModal() {
+      dayModalKey = null;
+      scheduleEditingId = null;
+      renderDayModal();
+    }
+
+    function parseDateOnly_local(key) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || ''));
+      if (!m) return null;
+      return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    }
+
+    function renderDayModal() {
+      const overlay = document.getElementById('dayModalOverlay');
+      if (!overlay) return;
+      if (!dayModalKey) { overlay.style.display = 'none'; return; }
+      overlay.style.display = '';
+      const d = parseDateOnly_local(dayModalKey);
+      document.getElementById('dayModalTitle').textContent = d ? (d.getDate() + ' ' + MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear()) : dayModalKey;
+      const tasks = sortedDayTasksPerson(dayModalKey);
+      const body = document.getElementById('dayModalBody');
+      body.innerHTML = tasks.length
+        ? tasks.map(function (t) { return dayTaskRowHtmlPerson(t, dayModalKey); }).join('')
+        : '<div class="day-task-empty">Няма задачи в календара за този ден.</div>';
+      body.querySelectorAll('[data-day-task-open]').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+          if (e.target.closest('.schedule-form')) return;
+          scheduleEditingId = el.getAttribute('data-day-task-open');
+          renderDayModal();
+        });
+      });
+      body.querySelectorAll('.schedule-cancel').forEach(function (btn) {
+        btn.addEventListener('click', function () { scheduleEditingId = null; renderDayModal(); });
+      });
+      body.querySelectorAll('.schedule-save').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+          const row = btn.closest('.day-task-main');
+          const time = row.querySelector('.schedule-time').value;
+          const timeEnd = row.querySelector('.schedule-time-end').value;
+          const note = row.querySelector('.schedule-note').value;
+          if (timeEnd && !time) { alert('Избери начален час, преди да зададеш краен.'); return; }
+          btn.disabled = true;
+          btn.textContent = 'Запазва се...';
+          await saveTaskSchedule(btn.getAttribute('data-id'), time, timeEnd, note);
+        });
+      });
+    }
+
+    async function saveTaskSchedule(id, time, timeEnd, note) {
+      try {
+        const res = await apiPost('setTaskSchedule', { id: id, time: time, timeEnd: timeEnd, note: note });
+        if (res.ok === false) { alert(res.error || 'Грешка.'); return; }
+        scheduleEditingId = null;
+        applyData(res);
+      } catch (err) { alert('Грешка при връзка със сървъра.'); }
     }
 
     // Прилага нов отговор от сървъра. Използвай това (вместо direktно
@@ -481,6 +602,7 @@
       lastSnapshot = JSON.stringify({ t: tasksData, p: pendingData, c: calendarTasksData });
       render(tasksData, pendingData, payload.name);
       renderCalendarPerson();
+      renderDayModal();
     }
 
     // Apps Script понякога не отговаря навреме (бавен round-trip, timeout,
@@ -682,10 +804,15 @@
     });
     renderCalendarPerson();
 
+    document.getElementById('dayModalClose').addEventListener('click', closeDayModal);
+    document.getElementById('dayModalOverlay').addEventListener('click', function (e) {
+      if (e.target === this) closeDayModal();
+    });
+
     refresh();
-    setInterval(function () { if (!editingCommentId && !editingPendingId) refresh(); }, 15000);
+    setInterval(function () { if (!editingCommentId && !editingPendingId && !scheduleEditingId) refresh(); }, 15000);
     document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible' && !editingCommentId && !editingPendingId) refresh();
+      if (document.visibilityState === 'visible' && !editingCommentId && !editingPendingId && !scheduleEditingId) refresh();
     });
   </script>
 </body>
