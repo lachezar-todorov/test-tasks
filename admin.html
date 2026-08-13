@@ -16,13 +16,14 @@
     <div class="tabs">
       <button type="button" class="tab-btn active" id="tabDashboard">Табло</button>
       <button type="button" class="tab-btn" id="tabProjects">Проекти</button>
-      <button type="button" class="tab-btn" id="tabCalendar">Календар</button>
+      <button type="button" class="tab-btn" id="tabCalendar">Админ. календар</button>
+      <button type="button" class="tab-btn" id="tabPersonalCalendars">Лични календари</button>
     </div>
     <div id="dashboardView">
       <div class="card">
         <h2>Нова задача</h2>
         <div class="addrow">
-          <input type="text" id="newTaskText" placeholder="Описание на задачата...">
+          <textarea id="newTaskText" class="autogrow-textarea" rows="1" placeholder="Описание на задачата..."></textarea>
           <select id="newTaskWho"></select>
           <select id="newTaskProject"></select>
           <label class="date-field">От <input type="date" id="newTaskStart"></label>
@@ -60,13 +61,30 @@
     </div>
     <div id="calendarView" style="display:none;">
       <div class="card">
-        <h2>Календар</h2>
+        <h2>Административен календар</h2>
         <div class="calendar-nav">
           <button type="button" class="btn-ghost" id="calPrev">‹ Предишен</button>
           <span class="calendar-label" id="calLabel"></span>
           <button type="button" class="btn-ghost" id="calNext">Следващ ›</button>
         </div>
         <div id="calendarGrid" class="calendar-grid-wrap"></div>
+      </div>
+    </div>
+    <div id="personalCalendarsView" style="display:none;">
+      <div class="card">
+        <h2>Лични календари</h2>
+        <div class="project-picker">
+          <select id="personCalendarSelect"></select>
+        </div>
+        <div id="personCalendarEmpty" class="empty">Избери човек отгоре, за да видиш личния му календар.</div>
+        <div id="personCalendarBody" style="display:none;">
+          <div class="calendar-nav">
+            <button type="button" class="btn-ghost" id="calPrevPersonal">‹ Предишен</button>
+            <span class="calendar-label" id="calLabelPersonal"></span>
+            <button type="button" class="btn-ghost" id="calNextPersonal">Следващ ›</button>
+          </div>
+          <div id="calendarGridPersonal" class="calendar-grid-wrap"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -121,7 +139,11 @@
     let calYear = (new Date()).getFullYear();
     let calMonth = (new Date()).getMonth();
     let dayModalKey = null;
+    let dayModalSource = 'admin'; // 'admin' = административен календар, 'personal' = нечий личен календар
     let scheduleEditingId = null;
+    let selectedPersonForCalendar = '';
+    let pcalYear = (new Date()).getFullYear();
+    let pcalMonth = (new Date()).getMonth();
     const openComments = new Set();
     const commentDrafts = {};
 
@@ -310,7 +332,7 @@
 
     function editRowHtml(t) {
       return '<div class="edit-row">' +
-        '<input type="text" class="edit-text" value="' + esc(t.text) + '">' +
+        '<textarea class="edit-text autogrow-textarea" rows="1">' + esc(t.text) + '</textarea>' +
         '<select class="edit-assignee">' + peopleOptions(t.assignee) + '</select>' +
         '<select class="edit-project">' + projectOptions(t.project) + '</select>' +
         '<label class="date-field">От <input type="date" class="edit-start" value="' + esc(t.startDate || '') + '"></label>' +
@@ -564,7 +586,75 @@
       }
       grid.innerHTML = html;
       grid.querySelectorAll('[data-day-key]').forEach(function (cell) {
-        cell.addEventListener('click', function () { openDayModal(cell.getAttribute('data-day-key')); });
+        cell.addEventListener('click', function () { openDayModal(cell.getAttribute('data-day-key'), 'admin'); });
+      });
+    }
+
+    // Личен календар на конкретен избран човек — само неговите задачи,
+    // отбелязани за личен календар (независимо от статус одобрена/чакаща).
+    function tasksForDayPersonal(key) {
+      if (!selectedPersonForCalendar) return [];
+      return data.filter(function (t) {
+        if (!t.inPersonalCalendar || t.assignee !== selectedPersonForCalendar) return false;
+        if (t.startDate && t.endDate) return key >= t.startDate && key <= t.endDate;
+        if (t.startDate) return key === t.startDate;
+        if (t.endDate) return key === t.endDate;
+        return false;
+      });
+    }
+
+    function renderPersonalCalendarAdmin() {
+      const emptyEl = document.getElementById('personCalendarEmpty');
+      const bodyEl = document.getElementById('personCalendarBody');
+      if (!emptyEl || !bodyEl) return;
+      if (!selectedPersonForCalendar) {
+        emptyEl.style.display = '';
+        bodyEl.style.display = 'none';
+        return;
+      }
+      emptyEl.style.display = 'none';
+      bodyEl.style.display = '';
+
+      const label = document.getElementById('calLabelPersonal');
+      if (label) label.textContent = MONTH_NAMES[pcalMonth] + ' ' + pcalYear;
+      const grid = document.getElementById('calendarGridPersonal');
+      if (!grid) return;
+
+      const firstOfMonth = new Date(pcalYear, pcalMonth, 1);
+      const startOffset = (firstOfMonth.getDay() + 6) % 7;
+      const gridStart = new Date(pcalYear, pcalMonth, 1 - startOffset);
+      const today = new Date();
+      const todayKey = dateKey(today.getFullYear(), today.getMonth(), today.getDate());
+
+      let html = '<div class="calendar-row calendar-weekdays"><div class="calendar-week-label"></div>' +
+        WEEKDAY_NAMES.map(function (n) { return '<div class="calendar-weekday">' + n + '</div>'; }).join('') +
+        '</div>';
+
+      for (let w = 0; w < 6; w++) {
+        const weekFirstDate = new Date(gridStart);
+        weekFirstDate.setDate(gridStart.getDate() + w * 7);
+        const weekNum = isoWeekNumber(weekFirstDate);
+        html += '<div class="calendar-row"><div class="calendar-week-label" title="Седмица">' + weekNum + '</div>';
+        for (let d = 0; d < 7; d++) {
+          const cellDate = new Date(gridStart);
+          cellDate.setDate(gridStart.getDate() + w * 7 + d);
+          const key = dateKey(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate());
+          const inMonth = cellDate.getMonth() === pcalMonth;
+          const isToday = key === todayKey;
+          const dayTasks = tasksForDayPersonal(key);
+          html += '<div class="calendar-cell' + (inMonth ? '' : ' calendar-cell-out') + (isToday ? ' calendar-cell-today' : '') + '" data-day-key="' + key + '">' +
+            '<div class="calendar-daynum">' + cellDate.getDate() + '</div>' +
+            '<div class="calendar-tasks">' + dayTasks.map(function (t) {
+              const isDeadline = !!(t.endDate && key === t.endDate);
+              return '<div class="calendar-task' + (isDeadline ? ' calendar-task-deadline' : '') + '" title="' + esc(t.text) + '">' + esc(t.text) + '</div>';
+            }).join('') + '</div>' +
+          '</div>';
+        }
+        html += '</div>';
+      }
+      grid.innerHTML = html;
+      grid.querySelectorAll('[data-day-key]').forEach(function (cell) {
+        cell.addEventListener('click', function () { openDayModal(cell.getAttribute('data-day-key'), 'personal'); });
       });
     }
 
@@ -576,7 +666,7 @@
     // Задачите за деня, подредени по начален час (без час — накрая, в
     // текущия им ред).
     function sortedDayTasks(key) {
-      const tasks = tasksForDay(key);
+      const tasks = dayModalSource === 'personal' ? tasksForDayPersonal(key) : tasksForDay(key);
       const timed = tasks.filter(function (t) { return !!t.time; }).sort(function (a, b) { return a.time < b.time ? -1 : (a.time > b.time ? 1 : 0); });
       const untimed = tasks.filter(function (t) { return !t.time; });
       return timed.concat(untimed);
@@ -638,8 +728,9 @@
       '</div>';
     }
 
-    function openDayModal(key) {
+    function openDayModal(key, source) {
       dayModalKey = key;
+      dayModalSource = source || 'admin';
       scheduleEditingId = null;
       renderDayModal();
     }
@@ -655,6 +746,9 @@
       if (!overlay) return;
       if (!dayModalKey) { overlay.style.display = 'none'; return; }
       overlay.style.display = '';
+      const exportBtn = document.getElementById('dayModalExportBtn');
+      // "Изтегли задачи" няма смисъл за нечий личен календар — само за административния
+      if (exportBtn) exportBtn.style.display = dayModalSource === 'personal' ? 'none' : '';
       const d = parseDateOnly_local(dayModalKey);
       document.getElementById('dayModalTitle').textContent = d ? (d.getDate() + ' ' + MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear()) : dayModalKey;
       const tasks = sortedDayTasks(dayModalKey);
@@ -810,7 +904,7 @@
           await toggleCommentLike(btn.getAttribute('data-comment-like'));
         });
       });
-      document.querySelectorAll('.comment-input, .comment-edit-text').forEach(function (el) {
+      document.querySelectorAll('.comment-input, .comment-edit-text, .edit-text, #newTaskText').forEach(function (el) {
         autoGrowTextarea(el);
       });
       document.querySelectorAll('.comment-input').forEach(function (input) {
@@ -819,7 +913,7 @@
           autoGrowTextarea(input);
         });
       });
-      document.querySelectorAll('.comment-edit-text').forEach(function (input) {
+      document.querySelectorAll('.comment-edit-text, .edit-text').forEach(function (input) {
         input.addEventListener('input', function () { autoGrowTextarea(input); });
       });
       document.querySelectorAll('.comment-send').forEach(function (btn) {
@@ -901,6 +995,7 @@
       renderDone();
       renderProjectsView();
       renderCalendar();
+      renderPersonalCalendarAdmin();
       renderDayModal();
       attachHandlers();
     }
@@ -932,6 +1027,7 @@
         if (created) markTaskOpened(created);
         applyData(res);
         document.getElementById('newTaskText').value = '';
+        autoGrowTextarea(document.getElementById('newTaskText'));
         document.getElementById('newTaskImportant').checked = false;
         document.getElementById('newTaskInCalendar').checked = false;
         document.getElementById('newTaskProject').value = '';
@@ -1069,6 +1165,7 @@
     document.getElementById('todayLabel').textContent = new Date().toLocaleDateString('bg-BG');
     document.getElementById('newTaskWho').innerHTML = peopleOptions();
     document.getElementById('newTaskProject').innerHTML = projectOptions();
+    document.getElementById('newTaskText').addEventListener('input', function () { autoGrowTextarea(this); });
     document.getElementById('addBtn').addEventListener('click', async function () {
       const btn = document.getElementById('addBtn');
       const input = document.getElementById('newTaskText');
@@ -1104,7 +1201,8 @@
     const tabs = [
       { btn: document.getElementById('tabDashboard'), view: document.getElementById('dashboardView') },
       { btn: document.getElementById('tabProjects'), view: document.getElementById('projectsView') },
-      { btn: document.getElementById('tabCalendar'), view: document.getElementById('calendarView') }
+      { btn: document.getElementById('tabCalendar'), view: document.getElementById('calendarView') },
+      { btn: document.getElementById('tabPersonalCalendars'), view: document.getElementById('personalCalendarsView') }
     ];
     tabs.forEach(function (tab) {
       tab.btn.addEventListener('click', function () {
@@ -1138,6 +1236,23 @@
       renderCalendar();
     });
     renderCalendar();
+
+    document.getElementById('personCalendarSelect').innerHTML = '<option value="">— избери човек —</option>' + peopleOptions();
+    document.getElementById('personCalendarSelect').addEventListener('change', function () {
+      selectedPersonForCalendar = this.value;
+      renderPersonalCalendarAdmin();
+    });
+    document.getElementById('calPrevPersonal').addEventListener('click', function () {
+      pcalMonth--;
+      if (pcalMonth < 0) { pcalMonth = 11; pcalYear--; }
+      renderPersonalCalendarAdmin();
+    });
+    document.getElementById('calNextPersonal').addEventListener('click', function () {
+      pcalMonth++;
+      if (pcalMonth > 11) { pcalMonth = 0; pcalYear++; }
+      renderPersonalCalendarAdmin();
+    });
+    renderPersonalCalendarAdmin();
 
     refresh();
 
