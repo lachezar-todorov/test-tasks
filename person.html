@@ -18,18 +18,22 @@
   <div class="person-wrap">
     <div class="tabs">
       <button type="button" class="tab-btn active" id="tabPersonal">Лично табло</button>
-      <button type="button" class="tab-btn" id="tabCalendarPerson">Календар</button>
+      <button type="button" class="tab-btn" id="tabCalendarPerson">Админ. календар</button>
+      <button type="button" class="tab-btn" id="tabPersonalCalendarPerson">Личен календар</button>
     </div>
     <div id="personalView">
       <div class="card person" style="margin:8px auto 0;">
         <h2 id="nameHeader">Задачи</h2>
         <p class="sub-note">Списъкът се обновява автоматично. Най-новите задачи са отгоре.</p>
         <div class="propose-row">
-          <input type="text" id="newTaskText" placeholder="Предложи си задача...">
+          <textarea id="newTaskText" class="autogrow-textarea" rows="1" placeholder="Предложи си задача..."></textarea>
           <select id="newTaskProject"></select>
           <label class="date-field">От <input type="date" id="newTaskStart"></label>
           <label class="date-field">До <input type="date" id="newTaskEnd"></label>
-          <label class="important-check"><input type="checkbox" id="newTaskImportant"> Важна</label>
+          <span class="check-pair">
+            <label class="important-check"><input type="checkbox" id="newTaskImportant"> Важна</label>
+            <label class="important-check"><input type="checkbox" id="newTaskPersonalCalendar"> Личен календар</label>
+          </span>
           <button class="btn-primary" id="addBtn">Добави</button>
         </div>
         <p class="sub-note" style="padding-top:0;">Трябва да избереш поне начална или крайна дата.</p>
@@ -47,7 +51,7 @@
     </div>
     <div id="calendarViewPerson" style="display:none;">
       <div class="card" style="max-width:none;margin-top:8px;">
-        <h2>Календар</h2>
+        <h2>Административен календар</h2>
         <p class="sub-note">Само за преглед — задачите се показват тук само ако администраторът ги е включил в календара.</p>
         <div class="calendar-nav">
           <button type="button" class="btn-ghost" id="calPrevPerson">‹ Предишен</button>
@@ -55,6 +59,18 @@
           <button type="button" class="btn-ghost" id="calNextPerson">Следващ ›</button>
         </div>
         <div id="calendarGridPerson" class="calendar-grid-wrap"></div>
+      </div>
+    </div>
+    <div id="personalCalendarViewPerson" style="display:none;">
+      <div class="card" style="max-width:none;margin-top:8px;">
+        <h2>Личен календар</h2>
+        <p class="sub-note">Само твоите задачи, отбелязани за личен календар — виждаш ги само ти.</p>
+        <div class="calendar-nav">
+          <button type="button" class="btn-ghost" id="calPrevPersonalPerson">‹ Предишен</button>
+          <span class="calendar-label" id="calLabelPersonalPerson"></span>
+          <button type="button" class="btn-ghost" id="calNextPersonalPerson">Следващ ›</button>
+        </div>
+        <div id="calendarGridPersonalPerson" class="calendar-grid-wrap"></div>
       </div>
     </div>
   </div>
@@ -92,17 +108,20 @@
     const params = new URLSearchParams(location.search);
     const u = params.get('u');
     const openComments = new Set();
+    const personalCalRevealed = new Set();
     const commentDrafts = {};
     let editingCommentId = null;
     let editingPendingId = null;
     let tasksData = [];
     let pendingData = [];
     let calendarTasksData = [];
+    let personalCalendarTasksData = [];
     let myName = '';
     let lastSnapshot = null;
     let calYear = (new Date()).getFullYear();
     let calMonth = (new Date()).getMonth();
     let dayModalKey = null;
+    let dayModalSource = 'admin'; // 'admin' = административен календар, 'personal' = моят личен календар
     let scheduleEditingId = null;
     let listFilter = ''; // '' = по активност (по подразбиране); иначе име на проект или NO_PROJECT_VALUE
     const NO_PROJECT_VALUE = '__none__';
@@ -247,11 +266,12 @@
     // одобрени, изчезват от тук и вече е само през админ панела.
     function pendingEditRowHtml(t) {
       return '<div class="task-row"><div class="edit-row">' +
-        '<input type="text" class="edit-text" value="' + esc(t.text) + '">' +
+        '<textarea class="edit-text autogrow-textarea" rows="1">' + esc(t.text) + '</textarea>' +
         '<select class="edit-project">' + projectOptions(t.project) + '</select>' +
         '<label class="date-field">От <input type="date" class="edit-start" value="' + esc(t.startDate || '') + '"></label>' +
         '<label class="date-field">До <input type="date" class="edit-end" value="' + esc(t.endDate || '') + '"></label>' +
         '<label class="important-check"><input type="checkbox" class="edit-important"' + (t.important ? ' checked' : '') + '> Важна</label>' +
+        '<label class="important-check"><input type="checkbox" class="edit-personal-calendar"' + (t.inPersonalCalendar ? ' checked' : '') + '> Личен календар</label>' +
         '<button class="btn-primary pending-edit-save" data-id="' + esc(t.id) + '">Запази</button>' +
         '<button class="btn-ghost pending-edit-cancel" data-id="' + esc(t.id) + '">Отказ</button>' +
       '</div></div>';
@@ -274,6 +294,9 @@
           taskTextHtml(t) +
           markReadBtnHtml(t) +
           commentToggleBtn(t) +
+          (!editable ? (personalCalRevealed.has(t.id)
+            ? '<label class="important-check personal-cal-toggle-label"><input type="checkbox" class="personal-cal-toggle" data-id="' + esc(t.id) + '"' + (t.inPersonalCalendar ? ' checked' : '') + '> Личен календар</label>'
+            : '<button class="btn-ghost personal-cal-reveal-btn" data-personal-cal-reveal="' + esc(t.id) + '" title="Личен календар">✎</button>') : '') +
           (editable ? '<button class="btn-ghost" data-pending-edit="' + esc(t.id) + '" title="Редактирай">✎</button>' +
             '<button class="btn-ghost" data-pending-del="' + esc(t.id) + '" title="Изтрий">✕</button>' : '') +
           '</div>' + commentsHtml(t) + '</li>';
@@ -323,6 +346,7 @@
           const startInput = li.querySelector('.edit-start');
           const endInput = li.querySelector('.edit-end');
           const importantCb = li.querySelector('.edit-important');
+          const personalCalendarCb = li.querySelector('.edit-personal-calendar');
           const text = textInput.value.trim();
           const project = projectSelect.value;
           const startDate = startInput.value;
@@ -336,7 +360,8 @@
           startInput.disabled = true;
           endInput.disabled = true;
           importantCb.disabled = true;
-          await editPendingTask(btn.getAttribute('data-id'), text, project, importantCb.checked, startDate, endDate);
+          personalCalendarCb.disabled = true;
+          await editPendingTask(btn.getAttribute('data-id'), text, project, importantCb.checked, personalCalendarCb.checked, startDate, endDate);
           if (document.body.contains(btn)) {
             btn.disabled = false;
             btn.textContent = 'Запази';
@@ -345,7 +370,22 @@
             startInput.disabled = false;
             endInput.disabled = false;
             importantCb.disabled = false;
+            personalCalendarCb.disabled = false;
           }
+        });
+      });
+      scope.querySelectorAll('.personal-cal-reveal-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          personalCalRevealed.add(btn.getAttribute('data-personal-cal-reveal'));
+          render(tasksData, pendingData, document.getElementById('nameHeader').textContent);
+        });
+      });
+      scope.querySelectorAll('.personal-cal-toggle').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+          cb.disabled = true;
+          setPersonalCalendar(cb.getAttribute('data-id'), cb.checked).then(function () {
+            // при успех render() вече е заместил тази клетка с нова (актуализирана) — нищо повече не пипаме тук
+          });
         });
       });
       scope.querySelectorAll('[data-pending-del]').forEach(function (btn) {
@@ -369,7 +409,7 @@
           await toggleCommentLike(btn.getAttribute('data-comment-like'));
         });
       });
-      scope.querySelectorAll('.comment-input, .comment-edit-text').forEach(function (el) {
+      scope.querySelectorAll('.comment-input, .comment-edit-text, .edit-text').forEach(function (el) {
         autoGrowTextarea(el);
       });
       scope.querySelectorAll('.comment-input').forEach(function (input) {
@@ -378,7 +418,7 @@
           autoGrowTextarea(input);
         });
       });
-      scope.querySelectorAll('.comment-edit-text').forEach(function (input) {
+      scope.querySelectorAll('.comment-edit-text, .edit-text').forEach(function (input) {
         input.addEventListener('input', function () { autoGrowTextarea(input); });
       });
       scope.querySelectorAll('.comment-send').forEach(function (btn) {
@@ -544,7 +584,61 @@
       }
       grid.innerHTML = html;
       grid.querySelectorAll('[data-day-key]').forEach(function (cell) {
-        cell.addEventListener('click', function () { openDayModal(cell.getAttribute('data-day-key')); });
+        cell.addEventListener('click', function () { openDayModal(cell.getAttribute('data-day-key'), 'admin'); });
+      });
+    }
+
+    // Личният ми календар — само моите задачи, отбелязани за него.
+    function tasksForDayPersonal(key) {
+      return personalCalendarTasksData.filter(function (t) {
+        if (t.startDate && t.endDate) return key >= t.startDate && key <= t.endDate;
+        if (t.startDate) return key === t.startDate;
+        if (t.endDate) return key === t.endDate;
+        return false;
+      });
+    }
+
+    function renderCalendarPersonal() {
+      const label = document.getElementById('calLabelPersonalPerson');
+      if (label) label.textContent = MONTH_NAMES[calMonth] + ' ' + calYear;
+      const grid = document.getElementById('calendarGridPersonalPerson');
+      if (!grid) return;
+
+      const firstOfMonth = new Date(calYear, calMonth, 1);
+      const startOffset = (firstOfMonth.getDay() + 6) % 7;
+      const gridStart = new Date(calYear, calMonth, 1 - startOffset);
+      const today = new Date();
+      const todayKey = calDateKey(today.getFullYear(), today.getMonth(), today.getDate());
+
+      let html = '<div class="calendar-row calendar-weekdays"><div class="calendar-week-label"></div>' +
+        WEEKDAY_NAMES.map(function (n) { return '<div class="calendar-weekday">' + n + '</div>'; }).join('') +
+        '</div>';
+
+      for (let w = 0; w < 6; w++) {
+        const weekFirstDate = new Date(gridStart);
+        weekFirstDate.setDate(gridStart.getDate() + w * 7);
+        const weekNum = isoWeekNumber(weekFirstDate);
+        html += '<div class="calendar-row"><div class="calendar-week-label" title="Седмица">' + weekNum + '</div>';
+        for (let d = 0; d < 7; d++) {
+          const cellDate = new Date(gridStart);
+          cellDate.setDate(gridStart.getDate() + w * 7 + d);
+          const key = calDateKey(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate());
+          const inMonth = cellDate.getMonth() === calMonth;
+          const isToday = key === todayKey;
+          const dayTasks = tasksForDayPersonal(key);
+          html += '<div class="calendar-cell' + (inMonth ? '' : ' calendar-cell-out') + (isToday ? ' calendar-cell-today' : '') + '" data-day-key="' + key + '">' +
+            '<div class="calendar-daynum">' + cellDate.getDate() + '</div>' +
+            '<div class="calendar-tasks">' + dayTasks.map(function (t) {
+              const isDeadline = !!(t.endDate && key === t.endDate);
+              return '<div class="calendar-task' + (isDeadline ? ' calendar-task-deadline' : '') + '" title="' + esc(t.text) + '">' + esc(t.text) + '</div>';
+            }).join('') + '</div>' +
+          '</div>';
+        }
+        html += '</div>';
+      }
+      grid.innerHTML = html;
+      grid.querySelectorAll('[data-day-key]').forEach(function (cell) {
+        cell.addEventListener('click', function () { openDayModal(cell.getAttribute('data-day-key'), 'personal'); });
       });
     }
 
@@ -555,7 +649,7 @@
 
     // Задачите за деня, подредени по начален час (без час — накрая, в текущия им ред).
     function sortedDayTasksPerson(key) {
-      const tasks = tasksForDayPerson(key);
+      const tasks = dayModalSource === 'personal' ? tasksForDayPersonal(key) : tasksForDayPerson(key);
       const timed = tasks.filter(function (t) { return !!t.time; }).sort(function (a, b) { return a.time < b.time ? -1 : (a.time > b.time ? 1 : 0); });
       const untimed = tasks.filter(function (t) { return !t.time; });
       return timed.concat(untimed);
@@ -617,8 +711,9 @@
       '</div>';
     }
 
-    function openDayModal(key) {
+    function openDayModal(key, source) {
       dayModalKey = key;
+      dayModalSource = source || 'admin';
       scheduleEditingId = null;
       renderDayModal();
     }
@@ -687,9 +782,11 @@
       tasksData = payload.tasks || [];
       pendingData = payload.pendingTasks || [];
       calendarTasksData = payload.calendarTasks || [];
-      lastSnapshot = JSON.stringify({ t: tasksData, p: pendingData, c: calendarTasksData });
+      personalCalendarTasksData = payload.personalCalendarTasks || [];
+      lastSnapshot = JSON.stringify({ t: tasksData, p: pendingData, c: calendarTasksData, pc: personalCalendarTasksData });
       render(tasksData, pendingData, payload.name);
       renderCalendarPerson();
+      renderCalendarPersonal();
       renderDayModal();
     }
 
@@ -735,7 +832,7 @@
           document.getElementById('pendingList').innerHTML = '';
           return;
         }
-        const snapshot = JSON.stringify({ t: data.tasks || [], p: data.pendingTasks || [], c: data.calendarTasks || [] });
+        const snapshot = JSON.stringify({ t: data.tasks || [], p: data.pendingTasks || [], c: data.calendarTasks || [], pc: data.personalCalendarTasks || [] });
         if (snapshot === lastSnapshot) return; // нищо ново — не пипаме екрана (за да не скача курсорът в коментар/поле)
         applyData(data);
       } catch (err) {
@@ -747,18 +844,21 @@
       const text = document.getElementById('newTaskText').value.trim();
       if (!text || !u) return;
       const important = document.getElementById('newTaskImportant').checked;
+      const personalCalendar = document.getElementById('newTaskPersonalCalendar').checked;
       const project = document.getElementById('newTaskProject').value;
       const startDate = document.getElementById('newTaskStart').value;
       const endDate = document.getElementById('newTaskEnd').value;
       if (!startDate && !endDate) { alert('Избери поне начална или крайна дата.'); return; }
       try {
-        const data = await apiPost('personAddTask', { text: text, important: important, project: project, startDate: startDate, endDate: endDate });
+        const data = await apiPost('personAddTask', { text: text, important: important, personalCalendar: personalCalendar, project: project, startDate: startDate, endDate: endDate });
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         const created = (data.pendingTasks || []).find(function (t) { return t.text === text; });
         if (created) markTaskOpened(created);
         applyData(data);
         document.getElementById('newTaskText').value = '';
+        autoGrowTextarea(document.getElementById('newTaskText'));
         document.getElementById('newTaskImportant').checked = false;
+        document.getElementById('newTaskPersonalCalendar').checked = false;
         document.getElementById('newTaskProject').value = '';
         document.getElementById('newTaskStart').value = '';
         document.getElementById('newTaskEnd').value = '';
@@ -767,11 +867,21 @@
       }
     }
 
-    async function editPendingTask(id, text, project, important, startDate, endDate) {
+    async function editPendingTask(id, text, project, important, personalCalendar, startDate, endDate) {
       try {
-        const data = await apiPost('personEditTask', { id: id, text: text, project: project, important: important, startDate: startDate, endDate: endDate });
+        const data = await apiPost('personEditTask', { id: id, text: text, project: project, important: important, personalCalendar: personalCalendar, startDate: startDate, endDate: endDate });
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         editingPendingId = null;
+        applyData(data);
+      } catch (err) {
+        alert('Грешка при връзка със сървъра.');
+      }
+    }
+
+    async function setPersonalCalendar(id, personalCalendar) {
+      try {
+        const data = await apiPost('personSetPersonalCalendar', { id: id, personalCalendar: personalCalendar });
+        if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         applyData(data);
       } catch (err) {
         alert('Грешка при връзка със сървъра.');
@@ -834,6 +944,7 @@
     }
 
     document.getElementById('newTaskProject').innerHTML = projectOptions();
+    document.getElementById('newTaskText').addEventListener('input', function () { autoGrowTextarea(this); });
     // на всяко зареждане на страницата филтърът тръгва от "Активност",
     // без значение какво е било избрано преди — не се пази в localStorage
     listFilter = '';
@@ -845,6 +956,7 @@
       const btn = document.getElementById('addBtn');
       const input = document.getElementById('newTaskText');
       const importantCb = document.getElementById('newTaskImportant');
+      const personalCalendarCb = document.getElementById('newTaskPersonalCalendar');
       const projectSelect = document.getElementById('newTaskProject');
       const startInput = document.getElementById('newTaskStart');
       const endInput = document.getElementById('newTaskEnd');
@@ -852,6 +964,7 @@
       btn.textContent = 'Добавя се...';
       input.disabled = true;
       importantCb.disabled = true;
+      personalCalendarCb.disabled = true;
       projectSelect.disabled = true;
       startInput.disabled = true;
       endInput.disabled = true;
@@ -860,6 +973,7 @@
       btn.textContent = 'Добави';
       input.disabled = false;
       importantCb.disabled = false;
+      personalCalendarCb.disabled = false;
       startInput.disabled = false;
       endInput.disabled = false;
       projectSelect.disabled = false;
@@ -877,7 +991,8 @@
 
     const personTabs = [
       { btn: document.getElementById('tabPersonal'), view: document.getElementById('personalView') },
-      { btn: document.getElementById('tabCalendarPerson'), view: document.getElementById('calendarViewPerson') }
+      { btn: document.getElementById('tabCalendarPerson'), view: document.getElementById('calendarViewPerson') },
+      { btn: document.getElementById('tabPersonalCalendarPerson'), view: document.getElementById('personalCalendarViewPerson') }
     ];
     personTabs.forEach(function (tab) {
       tab.btn.addEventListener('click', function () {
@@ -898,6 +1013,18 @@
       renderCalendarPerson();
     });
     renderCalendarPerson();
+
+    document.getElementById('calPrevPersonalPerson').addEventListener('click', function () {
+      calMonth--;
+      if (calMonth < 0) { calMonth = 11; calYear--; }
+      renderCalendarPersonal();
+    });
+    document.getElementById('calNextPersonalPerson').addEventListener('click', function () {
+      calMonth++;
+      if (calMonth > 11) { calMonth = 0; calYear++; }
+      renderCalendarPersonal();
+    });
+    renderCalendarPersonal();
 
     document.getElementById('dayModalClose').addEventListener('click', closeDayModal);
     document.getElementById('dayModalOverlay').addEventListener('click', function (e) {
