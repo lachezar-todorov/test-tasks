@@ -426,14 +426,38 @@
       });
     }
 
-    function listFilterOptions() {
+    // само проектите, за които човекът реално има поне една задача (плюс
+    // "— без проект —", само ако има поне една задача без проект) — не
+    // целия общ списък PROJECTS
+    function listFilterOptions(rows) {
+      const projectsInUse = [];
+      let hasNoProject = false;
+      (rows || []).forEach(function (t) {
+        if (t.project) {
+          if (projectsInUse.indexOf(t.project) === -1) projectsInUse.push(t.project);
+        } else {
+          hasNoProject = true;
+        }
+      });
+      projectsInUse.sort(function (a, b) { return PROJECTS.indexOf(a) - PROJECTS.indexOf(b); });
       return '<option value="">Активност</option>' +
-        '<option value="' + NO_PROJECT_VALUE + '">— без проект —</option>' +
-        PROJECTS.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
+        (hasNoProject ? '<option value="' + NO_PROJECT_VALUE + '">— без проект —</option>' : '') +
+        projectsInUse.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
     }
 
     function render(rows, pending, name) {
       if (name) { document.getElementById('nameHeader').textContent = name; myName = name; }
+      // опциите в падащото меню отразяват само проектите, които действително
+      // се срещат в текущите задачи — пресъздават се на всеки render(), за да
+      // се появи нов проект веднага щом се добави задача с него
+      const filterSelect = document.getElementById('listFilter');
+      filterSelect.innerHTML = listFilterOptions(rows);
+      // ако избраният преди филтър вече не съществува като опция (напр.
+      // изчезнала е последната задача от този проект), пада обратно на "Активност"
+      if (listFilter && filterSelect.querySelector('option[value="' + CSS.escape(listFilter) + '"]') === null) {
+        listFilter = '';
+      }
+      filterSelect.value = listFilter;
       let filtered = rows || [];
       let emptyMsg = 'Нямаш активни задачи в момента.';
       if (listFilter) {
@@ -809,7 +833,9 @@
     }
 
     document.getElementById('newTaskProject').innerHTML = projectOptions();
-    document.getElementById('listFilter').innerHTML = listFilterOptions();
+    // на всяко зареждане на страницата филтърът тръгва от "Активност",
+    // без значение какво е било избрано преди — не се пази в localStorage
+    listFilter = '';
     document.getElementById('listFilter').addEventListener('change', function () {
       listFilter = this.value;
       render(tasksData, pendingData, document.getElementById('nameHeader').textContent);
