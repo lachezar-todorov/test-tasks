@@ -26,11 +26,13 @@
           <textarea id="newTaskText" class="autogrow-textarea" rows="1" placeholder="Описание на задачата..."></textarea>
           <select id="newTaskWho"></select>
           <select id="newTaskProject"></select>
+          <select id="newTaskType"></select>
           <label class="date-field">От <input type="date" id="newTaskStart"></label>
           <label class="date-field">До <input type="date" id="newTaskEnd"></label>
           <span class="check-pair">
             <label class="important-check"><input type="checkbox" id="newTaskImportant"> Важна</label>
             <label class="important-check"><input type="checkbox" id="newTaskInCalendar"> Календар</label>
+            <label class="important-check"><input type="checkbox" id="newTaskPersonalCalendar"> Личен календар</label>
           </span>
           <button class="btn-primary" id="addBtn">Добави</button>
         </div>
@@ -55,6 +57,7 @@
             <option value="assignee">Подреди по изпълнител</option>
             <option value="status">Подреди по статус</option>
           </select>
+          <select id="projectTaskTypeFilter"></select>
         </div>
         <div id="projectTaskList"><div class="empty">Избери проект отгоре, за да видиш задачите му.</div></div>
       </div>
@@ -127,6 +130,12 @@
       'Юск'
     ];
 
+    const TASK_TYPES = ['Сервиз', 'Монтаж', 'Заваряване'];
+    const TASK_TYPE_PREFIX = { 'Сервиз': 'Сервиз - ', 'Монтаж': 'Монтаж - ', 'Заваряване': 'Заваряване - ' };
+    function displayTaskText(t) {
+      return (TASK_TYPE_PREFIX[t.taskType] || '') + t.text;
+    }
+
     const pin = sessionStorage.getItem('pin');
     if (!pin) { location.href = 'index.html'; }
 
@@ -136,6 +145,7 @@
     let editingCommentId = null;
     let selectedProject = '';
     let projectSort = 'activity';
+    let selectedTaskTypeFilter = '';
     let calYear = (new Date()).getFullYear();
     let calMonth = (new Date()).getMonth();
     let dayModalKey = null;
@@ -247,6 +257,22 @@
       }).join('');
     }
 
+    function taskTypeOptions(selected) {
+      return '<option value=""' + (!selected ? ' selected' : '') + '>без категория</option>' + TASK_TYPES.map(function (tt) {
+        return '<option value="' + esc(tt) + '"' + (tt === selected ? ' selected' : '') + '>' + esc(tt) + '</option>';
+      }).join('');
+    }
+
+    const NO_TASK_TYPE_VALUE = '__notype__';
+
+    function taskTypeFilterOptions(selected) {
+      return '<option value=""' + (!selected ? ' selected' : '') + '>Всички видове</option>' +
+        '<option value="' + NO_TASK_TYPE_VALUE + '"' + (selected === NO_TASK_TYPE_VALUE ? ' selected' : '') + '>без категория</option>' +
+        TASK_TYPES.map(function (tt) {
+          return '<option value="' + esc(tt) + '"' + (tt === selected ? ' selected' : '') + '>' + esc(tt) + '</option>';
+        }).join('');
+    }
+
     function projectBadge(t) {
       return t.project ? '<span class="badge-project">' + esc(t.project) + '</span>' : '';
     }
@@ -320,7 +346,7 @@
     function taskTextHtml(t, extraCls, fullCheck) {
       const unread = fullCheck ? isTaskUnread(t) : (t.comments || []).some(isUnread);
       const cls = 'task-text' + (extraCls ? ' ' + extraCls : '') + (unread ? ' task-text-unread' : '');
-      return '<span class="' + cls + '">' + (unread ? '<span class="unread-dot"></span>' : '') + esc(t.text) + '</span>';
+      return '<span class="' + cls + '">' + (unread ? '<span class="unread-dot"></span>' : '') + esc(displayTaskText(t)) + '</span>';
     }
 
     // Само за "Чакат одобрение" — маркира самата задача като видяна, без да
@@ -335,10 +361,12 @@
         '<textarea class="edit-text autogrow-textarea" rows="1">' + esc(t.text) + '</textarea>' +
         '<select class="edit-assignee">' + peopleOptions(t.assignee) + '</select>' +
         '<select class="edit-project">' + projectOptions(t.project) + '</select>' +
+        '<select class="edit-type">' + taskTypeOptions(t.taskType) + '</select>' +
         '<label class="date-field">От <input type="date" class="edit-start" value="' + esc(t.startDate || '') + '"></label>' +
         '<label class="date-field">До <input type="date" class="edit-end" value="' + esc(t.endDate || '') + '"></label>' +
         '<label class="important-check"><input type="checkbox" class="edit-important"' + (t.important ? ' checked' : '') + '> Важна</label>' +
         '<label class="important-check"><input type="checkbox" class="edit-in-calendar"' + (t.inCalendar ? ' checked' : '') + '> Календар</label>' +
+        '<label class="important-check"><input type="checkbox" class="edit-personal-calendar"' + (t.inPersonalCalendar ? ' checked' : '') + '> Личен календар</label>' +
         '<button class="btn-primary edit-save" data-id="' + esc(t.id) + '">Запази</button>' +
         '<button class="btn-ghost edit-cancel" data-id="' + esc(t.id) + '">Отказ</button>' +
       '</div>';
@@ -474,16 +502,24 @@
 
     function renderProjectsView() {
       const listEl = document.getElementById('projectTaskList');
-      if (!selectedProject) {
-        listEl.innerHTML = '<div class="empty">Избери проект отгоре, за да видиш задачите му.</div>';
+      if (!selectedProject && !selectedTaskTypeFilter) {
+        listEl.innerHTML = '<div class="empty">Избери проект и/или вид задача отгоре, за да видиш задачите.</div>';
         return;
       }
-      let rows = selectedProject === NO_PROJECT_VALUE
-        ? data.filter(function (t) { return !t.project; })
-        : data.filter(function (t) { return t.project === selectedProject; });
+      let rows = data;
+      if (selectedProject) {
+        rows = selectedProject === NO_PROJECT_VALUE
+          ? rows.filter(function (t) { return !t.project; })
+          : rows.filter(function (t) { return t.project === selectedProject; });
+      }
+      if (selectedTaskTypeFilter === NO_TASK_TYPE_VALUE) {
+        rows = rows.filter(function (t) { return !t.taskType; });
+      } else if (selectedTaskTypeFilter) {
+        rows = rows.filter(function (t) { return t.taskType === selectedTaskTypeFilter; });
+      }
       rows = sortProjectRows(rows, projectSort);
       if (!rows.length) {
-        listEl.innerHTML = '<div class="empty">' + (selectedProject === NO_PROJECT_VALUE ? 'Няма задачи без проект.' : 'Няма задачи за този проект.') + '</div>';
+        listEl.innerHTML = '<div class="empty">Няма задачи за избрания филтър.</div>';
         return;
       }
       const g = groupByAssignee(rows);
@@ -498,6 +534,7 @@
               ? '<span class="badge-pending">Чака</span>'
               : '<input type="checkbox" class="chk" ' + (isDone ? 'checked ' : '') + 'data-id="' + esc(t.id) + '">') +
             (t.important ? importantBadge() : '') +
+            projectBadge(t) +
             dateBadge(t) +
             taskTextHtml(t, isDone ? 'task-text-done' : null, isPending) +
             (isPending ? markReadBtnHtml(t) : '') +
@@ -578,7 +615,7 @@
             '<div class="calendar-tasks">' + dayTasks.map(function (t) {
               // краен ден (независимо дали има и начална дата) — оцветява се в червено
               const isDeadline = !!(t.endDate && key === t.endDate);
-              return '<div class="calendar-task' + (isDeadline ? ' calendar-task-deadline' : '') + '" title="' + esc(t.text) + '">' + esc(t.text) + '</div>';
+              return '<div class="calendar-task' + (isDeadline ? ' calendar-task-deadline' : '') + '" title="' + esc(displayTaskText(t)) + '">' + esc(displayTaskText(t)) + '</div>';
             }).join('') + '</div>' +
           '</div>';
         }
@@ -646,7 +683,7 @@
             '<div class="calendar-daynum">' + cellDate.getDate() + '</div>' +
             '<div class="calendar-tasks">' + dayTasks.map(function (t) {
               const isDeadline = !!(t.endDate && key === t.endDate);
-              return '<div class="calendar-task' + (isDeadline ? ' calendar-task-deadline' : '') + '" title="' + esc(t.text) + '">' + esc(t.text) + '</div>';
+              return '<div class="calendar-task' + (isDeadline ? ' calendar-task-deadline' : '') + '" title="' + esc(displayTaskText(t)) + '">' + esc(displayTaskText(t)) + '</div>';
             }).join('') + '</div>' +
           '</div>';
         }
@@ -720,7 +757,7 @@
         '<div class="day-task-main' + (canEdit && !editing ? ' day-task-clickable' : '') + '"' + (canEdit && !editing ? ' data-day-task-open="' + esc(t.id) + '"' : '') + '>' +
           (timeLabel ? '<span class="day-task-time' + (isDeadline ? ' day-task-time-deadline' : '') + '">' + esc(timeLabel) + '</span>' : '') +
           '<span class="day-task-assignee">' + esc(t.assignee) + '</span>' +
-          '<div class="day-task-text">' + projectBadge(t) + (t.project ? ' ' : '') + esc(t.text) + '</div>' +
+          '<div class="day-task-text">' + projectBadge(t) + (t.project ? ' ' : '') + esc(displayTaskText(t)) + '</div>' +
           (t.note ? '<div class="day-task-note">' + esc(t.note) + '</div>' : '') +
           (editing ? scheduleFormHtml(t) : '') +
         '</div>' +
@@ -837,13 +874,16 @@
           const textInput = li.querySelector('.edit-text');
           const assigneeSelect = li.querySelector('.edit-assignee');
           const projectSelect = li.querySelector('.edit-project');
+          const typeSelect = li.querySelector('.edit-type');
           const startInput = li.querySelector('.edit-start');
           const endInput = li.querySelector('.edit-end');
           const importantCb = li.querySelector('.edit-important');
           const inCalendarCb = li.querySelector('.edit-in-calendar');
+          const personalCalendarCb = li.querySelector('.edit-personal-calendar');
           const text = textInput.value.trim();
           const assignee = assigneeSelect.value;
           const project = projectSelect.value;
+          const taskType = typeSelect.value;
           const startDate = startInput.value;
           const endDate = endInput.value;
           if (!text) return;
@@ -852,21 +892,25 @@
           textInput.disabled = true;
           assigneeSelect.disabled = true;
           projectSelect.disabled = true;
+          typeSelect.disabled = true;
           startInput.disabled = true;
           endInput.disabled = true;
           importantCb.disabled = true;
           inCalendarCb.disabled = true;
-          await editTask(btn.getAttribute('data-id'), text, assignee, importantCb.checked, project, startDate, endDate, inCalendarCb.checked);
+          personalCalendarCb.disabled = true;
+          await editTask(btn.getAttribute('data-id'), text, assignee, importantCb.checked, project, startDate, endDate, inCalendarCb.checked, personalCalendarCb.checked, taskType);
           if (document.body.contains(btn)) {
             btn.disabled = false;
             btn.textContent = 'Запази';
             textInput.disabled = false;
             assigneeSelect.disabled = false;
             projectSelect.disabled = false;
+            typeSelect.disabled = false;
             startInput.disabled = false;
             endInput.disabled = false;
             importantCb.disabled = false;
             inCalendarCb.disabled = false;
+            personalCalendarCb.disabled = false;
           }
         });
       });
@@ -1014,14 +1058,16 @@
       const text = document.getElementById('newTaskText').value.trim();
       const who = document.getElementById('newTaskWho').value;
       const project = document.getElementById('newTaskProject').value;
+      const taskType = document.getElementById('newTaskType').value;
       const startDate = document.getElementById('newTaskStart').value;
       const endDate = document.getElementById('newTaskEnd').value;
       const important = document.getElementById('newTaskImportant').checked;
       const inCalendar = document.getElementById('newTaskInCalendar').checked;
+      const personalCalendar = document.getElementById('newTaskPersonalCalendar').checked;
       if (!text) return;
       if (!startDate && !endDate) { alert('Избери поне начална или крайна дата.'); return; }
       try {
-        const res = await apiPost('addTask', { text: text, assignee: who, important: important, project: project, startDate: startDate, endDate: endDate, inCalendar: inCalendar });
+        const res = await apiPost('addTask', { text: text, assignee: who, important: important, project: project, taskType: taskType, startDate: startDate, endDate: endDate, inCalendar: inCalendar, personalCalendar: personalCalendar });
         if (res.ok === false) { onError({ message: res.error }); return; }
         const created = (res.tasks || []).find(function (t) { return t.text === text && t.assignee === who; });
         if (created) markTaskOpened(created);
@@ -1030,15 +1076,17 @@
         autoGrowTextarea(document.getElementById('newTaskText'));
         document.getElementById('newTaskImportant').checked = false;
         document.getElementById('newTaskInCalendar').checked = false;
+        document.getElementById('newTaskPersonalCalendar').checked = false;
         document.getElementById('newTaskProject').value = '';
+        document.getElementById('newTaskType').value = '';
         document.getElementById('newTaskStart').value = '';
         document.getElementById('newTaskEnd').value = '';
       } catch (err) { onError(err); }
     }
 
-    async function editTask(id, text, assignee, important, project, startDate, endDate, inCalendar) {
+    async function editTask(id, text, assignee, important, project, startDate, endDate, inCalendar, personalCalendar, taskType) {
       try {
-        const res = await apiPost('editTask', { id: id, text: text, assignee: assignee, important: important, project: project, startDate: startDate, endDate: endDate, inCalendar: inCalendar });
+        const res = await apiPost('editTask', { id: id, text: text, assignee: assignee, important: important, project: project, startDate: startDate, endDate: endDate, inCalendar: inCalendar, personalCalendar: personalCalendar, taskType: taskType });
         if (res.ok === false) { onError({ message: res.error }); return; }
         editingId = null;
         applyData(res);
@@ -1165,13 +1213,16 @@
     document.getElementById('todayLabel').textContent = new Date().toLocaleDateString('bg-BG');
     document.getElementById('newTaskWho').innerHTML = peopleOptions();
     document.getElementById('newTaskProject').innerHTML = projectOptions();
+    document.getElementById('newTaskType').innerHTML = taskTypeOptions();
     document.getElementById('newTaskText').addEventListener('input', function () { autoGrowTextarea(this); });
     document.getElementById('addBtn').addEventListener('click', async function () {
       const btn = document.getElementById('addBtn');
       const input = document.getElementById('newTaskText');
       const importantCb = document.getElementById('newTaskImportant');
       const inCalendarCb = document.getElementById('newTaskInCalendar');
+      const personalCalendarCb = document.getElementById('newTaskPersonalCalendar');
       const projectSelect = document.getElementById('newTaskProject');
+      const typeSelect = document.getElementById('newTaskType');
       const startInput = document.getElementById('newTaskStart');
       const endInput = document.getElementById('newTaskEnd');
       btn.disabled = true;
@@ -1179,7 +1230,9 @@
       input.disabled = true;
       importantCb.disabled = true;
       inCalendarCb.disabled = true;
+      personalCalendarCb.disabled = true;
       projectSelect.disabled = true;
+      typeSelect.disabled = true;
       startInput.disabled = true;
       endInput.disabled = true;
       await addTask();
@@ -1188,7 +1241,9 @@
       input.disabled = false;
       importantCb.disabled = false;
       inCalendarCb.disabled = false;
+      personalCalendarCb.disabled = false;
       projectSelect.disabled = false;
+      typeSelect.disabled = false;
       startInput.disabled = false;
       endInput.disabled = false;
     });
@@ -1222,6 +1277,12 @@
     });
     document.getElementById('projectSort').addEventListener('change', function () {
       projectSort = this.value;
+      renderProjectsView();
+      attachHandlers();
+    });
+    document.getElementById('projectTaskTypeFilter').innerHTML = taskTypeFilterOptions();
+    document.getElementById('projectTaskTypeFilter').addEventListener('change', function () {
+      selectedTaskTypeFilter = this.value;
       renderProjectsView();
       attachHandlers();
     });
