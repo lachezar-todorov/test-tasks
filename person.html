@@ -28,6 +28,7 @@
         <div class="propose-row">
           <textarea id="newTaskText" class="autogrow-textarea" rows="1" placeholder="Предложи си задача..."></textarea>
           <select id="newTaskProject"></select>
+          <select id="newTaskType"></select>
           <label class="date-field">От <input type="date" id="newTaskStart"></label>
           <label class="date-field">До <input type="date" id="newTaskEnd"></label>
           <span class="check-pair">
@@ -104,6 +105,12 @@
       'Кауфланд',
       'Юск'
     ];
+
+    const TASK_TYPES = ['Сервиз', 'Монтаж', 'Заваряване'];
+    const TASK_TYPE_PREFIX = { 'Сервиз': 'Сервиз - ', 'Монтаж': 'Монтаж - ', 'Заваряване': 'Заваряване - ' };
+    function displayTaskText(t) {
+      return (TASK_TYPE_PREFIX[t.taskType] || '') + t.text;
+    }
 
     const params = new URLSearchParams(location.search);
     const u = params.get('u');
@@ -226,6 +233,12 @@
       }).join('');
     }
 
+    function taskTypeOptions(selected) {
+      return '<option value=""' + (!selected ? ' selected' : '') + '>без категория</option>' + TASK_TYPES.map(function (tt) {
+        return '<option value="' + esc(tt) + '"' + (tt === selected ? ' selected' : '') + '>' + esc(tt) + '</option>';
+      }).join('');
+    }
+
     function projectBadge(t) {
       return t.project ? '<span class="badge-project">' + esc(t.project) + '</span>' : '';
     }
@@ -251,7 +264,7 @@
     function taskTextHtml(t) {
       const unread = isTaskUnread(t);
       return '<span class="task-text' + (unread ? ' task-text-unread' : '') + '">' +
-        (unread ? '<span class="unread-dot"></span>' : '') + esc(t.text) + '</span>';
+        (unread ? '<span class="unread-dot"></span>' : '') + esc(displayTaskText(t)) + '</span>';
     }
 
     // Отделен бутон само за да маркираш САМАТА задача като видяна, без да
@@ -268,6 +281,7 @@
       return '<div class="task-row"><div class="edit-row">' +
         '<textarea class="edit-text autogrow-textarea" rows="1">' + esc(t.text) + '</textarea>' +
         '<select class="edit-project">' + projectOptions(t.project) + '</select>' +
+        '<select class="edit-type">' + taskTypeOptions(t.taskType) + '</select>' +
         '<label class="date-field">От <input type="date" class="edit-start" value="' + esc(t.startDate || '') + '"></label>' +
         '<label class="date-field">До <input type="date" class="edit-end" value="' + esc(t.endDate || '') + '"></label>' +
         '<label class="important-check"><input type="checkbox" class="edit-important"' + (t.important ? ' checked' : '') + '> Важна</label>' +
@@ -344,12 +358,14 @@
           const li = btn.closest('li');
           const textInput = li.querySelector('.edit-text');
           const projectSelect = li.querySelector('.edit-project');
+          const typeSelect = li.querySelector('.edit-type');
           const startInput = li.querySelector('.edit-start');
           const endInput = li.querySelector('.edit-end');
           const importantCb = li.querySelector('.edit-important');
           const personalCalendarCb = li.querySelector('.edit-personal-calendar');
           const text = textInput.value.trim();
           const project = projectSelect.value;
+          const taskType = typeSelect.value;
           const startDate = startInput.value;
           const endDate = endInput.value;
           if (!text) return;
@@ -358,16 +374,18 @@
           btn.textContent = 'Запазва се...';
           textInput.disabled = true;
           projectSelect.disabled = true;
+          typeSelect.disabled = true;
           startInput.disabled = true;
           endInput.disabled = true;
           importantCb.disabled = true;
           personalCalendarCb.disabled = true;
-          await editPendingTask(btn.getAttribute('data-id'), text, project, importantCb.checked, personalCalendarCb.checked, startDate, endDate);
+          await editPendingTask(btn.getAttribute('data-id'), text, project, importantCb.checked, personalCalendarCb.checked, startDate, endDate, taskType);
           if (document.body.contains(btn)) {
             btn.disabled = false;
             btn.textContent = 'Запази';
             textInput.disabled = false;
             projectSelect.disabled = false;
+            typeSelect.disabled = false;
             startInput.disabled = false;
             endInput.disabled = false;
             importantCb.disabled = false;
@@ -582,7 +600,7 @@
             '<div class="calendar-daynum">' + cellDate.getDate() + '</div>' +
             '<div class="calendar-tasks">' + dayTasks.map(function (t) {
               const isDeadline = !!(t.endDate && key === t.endDate);
-              const label = esc(t.assignee) + ': ' + esc(t.text);
+              const label = esc(t.assignee) + ': ' + esc(displayTaskText(t));
               return '<div class="calendar-task' + (isDeadline ? ' calendar-task-deadline' : '') + '" title="' + label + '">' + label + '</div>';
             }).join('') + '</div>' +
           '</div>';
@@ -637,7 +655,7 @@
             '<div class="calendar-daynum">' + cellDate.getDate() + '</div>' +
             '<div class="calendar-tasks">' + dayTasks.map(function (t) {
               const isDeadline = !!(t.endDate && key === t.endDate);
-              return '<div class="calendar-task' + (isDeadline ? ' calendar-task-deadline' : '') + '" title="' + esc(t.text) + '">' + esc(t.text) + '</div>';
+              return '<div class="calendar-task' + (isDeadline ? ' calendar-task-deadline' : '') + '" title="' + esc(displayTaskText(t)) + '">' + esc(displayTaskText(t)) + '</div>';
             }).join('') + '</div>' +
           '</div>';
         }
@@ -710,7 +728,7 @@
         '<div class="day-task-main' + (canEdit && !editing ? ' day-task-clickable' : '') + '"' + (canEdit && !editing ? ' data-day-task-open="' + esc(t.id) + '"' : '') + '>' +
           (timeLabel ? '<span class="day-task-time' + (isDeadline ? ' day-task-time-deadline' : '') + '">' + esc(timeLabel) + '</span>' : '') +
           '<span class="day-task-assignee">' + esc(t.assignee) + '</span>' +
-          '<div class="day-task-text">' + esc(t.text) + '</div>' +
+          '<div class="day-task-text">' + esc(displayTaskText(t)) + '</div>' +
           (t.note ? '<div class="day-task-note">' + esc(t.note) + '</div>' : '') +
           (editing ? scheduleFormHtmlPerson(t) : '') +
         '</div>' +
@@ -853,11 +871,12 @@
       const important = document.getElementById('newTaskImportant').checked;
       const personalCalendar = document.getElementById('newTaskPersonalCalendar').checked;
       const project = document.getElementById('newTaskProject').value;
+      const taskType = document.getElementById('newTaskType').value;
       const startDate = document.getElementById('newTaskStart').value;
       const endDate = document.getElementById('newTaskEnd').value;
       if (!startDate && !endDate) { alert('Избери поне начална или крайна дата.'); return; }
       try {
-        const data = await apiPost('personAddTask', { text: text, important: important, personalCalendar: personalCalendar, project: project, startDate: startDate, endDate: endDate });
+        const data = await apiPost('personAddTask', { text: text, important: important, personalCalendar: personalCalendar, project: project, taskType: taskType, startDate: startDate, endDate: endDate });
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         const created = (data.pendingTasks || []).find(function (t) { return t.text === text; });
         if (created) markTaskOpened(created);
@@ -867,6 +886,7 @@
         document.getElementById('newTaskImportant').checked = false;
         document.getElementById('newTaskPersonalCalendar').checked = false;
         document.getElementById('newTaskProject').value = '';
+        document.getElementById('newTaskType').value = '';
         document.getElementById('newTaskStart').value = '';
         document.getElementById('newTaskEnd').value = '';
       } catch (err) {
@@ -874,9 +894,9 @@
       }
     }
 
-    async function editPendingTask(id, text, project, important, personalCalendar, startDate, endDate) {
+    async function editPendingTask(id, text, project, important, personalCalendar, startDate, endDate, taskType) {
       try {
-        const data = await apiPost('personEditTask', { id: id, text: text, project: project, important: important, personalCalendar: personalCalendar, startDate: startDate, endDate: endDate });
+        const data = await apiPost('personEditTask', { id: id, text: text, project: project, important: important, personalCalendar: personalCalendar, startDate: startDate, endDate: endDate, taskType: taskType });
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         editingPendingId = null;
         applyData(data);
@@ -951,6 +971,7 @@
     }
 
     document.getElementById('newTaskProject').innerHTML = projectOptions();
+    document.getElementById('newTaskType').innerHTML = taskTypeOptions();
     document.getElementById('newTaskText').addEventListener('input', function () { autoGrowTextarea(this); });
     // на всяко зареждане на страницата филтърът тръгва от "Активност",
     // без значение какво е било избрано преди — не се пази в localStorage
@@ -965,6 +986,7 @@
       const importantCb = document.getElementById('newTaskImportant');
       const personalCalendarCb = document.getElementById('newTaskPersonalCalendar');
       const projectSelect = document.getElementById('newTaskProject');
+      const typeSelect = document.getElementById('newTaskType');
       const startInput = document.getElementById('newTaskStart');
       const endInput = document.getElementById('newTaskEnd');
       btn.disabled = true;
@@ -973,6 +995,7 @@
       importantCb.disabled = true;
       personalCalendarCb.disabled = true;
       projectSelect.disabled = true;
+      typeSelect.disabled = true;
       startInput.disabled = true;
       endInput.disabled = true;
       await addTask();
@@ -984,6 +1007,7 @@
       startInput.disabled = false;
       endInput.disabled = false;
       projectSelect.disabled = false;
+      typeSelect.disabled = false;
     });
     // Съобщение за новите функции — веднъж скрито (клик на "Скрий"), не се показва повече никога.
     const CHANGELOG_KEY = 'changelogDismissed_v4';
