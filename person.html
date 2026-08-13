@@ -11,7 +11,7 @@
     <img class="site-logo" src="logo.svg" alt="" onerror="this.style.display='none'">
   </div>
   <div class="changelog-banner" id="changelogBanner" style="display:none;">
-    <div class="changelog-text">🆕 <strong>НОВО!</strong> Календар с начални/крайни дати на задачите, лайкове на коментари, и вече можеш сам да редактираш/триеш своите все още неодобрени задачи. Нова страница с Календар само за преглед!</div>
+    <div class="changelog-text">🆕 <strong>НОВО!</strong> В страницата на календара, вече може подробно да бъде отворен конкретен ден и да се добави час или бележка от собственика на задачата!</div>
     <button type="button" class="btn-ghost" id="changelogDismiss">Скрий</button>
   </div>
 
@@ -138,6 +138,13 @@
       });
     }
 
+    // разширява textarea-та за коментари надолу вместо да остави текста да
+    // скролва настрани — прилага се и при печатане, и веднага след render()
+    function autoGrowTextarea(el) {
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    }
+
     function commentsHtml(t) {
       const open = openComments.has(t.id);
       const list = (t.comments || []).map(function (c) {
@@ -146,7 +153,7 @@
         const cls = 'comment ' + (c.author === 'Админ' ? 'comment-admin' : 'comment-person') + (unread ? ' comment-unread' : '');
         let body;
         if (c.id === editingCommentId) {
-          body = '<div class="comment-edit-row"><input type="text" class="comment-edit-text" value="' + esc(c.text) + '">' +
+          body = '<div class="comment-edit-row"><textarea class="comment-edit-text" rows="1">' + esc(c.text) + '</textarea>' +
             '<button class="btn-primary comment-edit-save" data-comment="' + esc(c.id) + '">Запази</button>' +
             '<button class="btn-ghost comment-edit-cancel" data-comment="' + esc(c.id) + '">Отказ</button></div>';
         } else {
@@ -166,7 +173,7 @@
       return '<div class="comments" id="comments-' + esc(t.id) + '" style="display:' + (open ? 'block' : 'none') + '">' +
         '<div class="comment-list">' + (list || '<div class="comment-empty">Няма коментари.</div>') + '</div>' +
         '<div class="comment-add">' +
-          '<input type="text" class="comment-input" data-task="' + esc(t.id) + '" placeholder="Коментар..." value="' + esc(draft) + '">' +
+          '<textarea class="comment-input" data-task="' + esc(t.id) + '" placeholder="Коментар..." rows="1">' + esc(draft) + '</textarea>' +
           '<button class="btn-ghost comment-send" data-task="' + esc(t.id) + '">Изпрати</button>' +
         '</div>' +
       '</div>';
@@ -354,10 +361,17 @@
           await toggleCommentLike(btn.getAttribute('data-comment-like'));
         });
       });
+      scope.querySelectorAll('.comment-input, .comment-edit-text').forEach(function (el) {
+        autoGrowTextarea(el);
+      });
       scope.querySelectorAll('.comment-input').forEach(function (input) {
         input.addEventListener('input', function () {
           commentDrafts[input.getAttribute('data-task')] = input.value;
+          autoGrowTextarea(input);
         });
+      });
+      scope.querySelectorAll('.comment-edit-text').forEach(function (input) {
+        input.addEventListener('input', function () { autoGrowTextarea(input); });
       });
       scope.querySelectorAll('.comment-send').forEach(function (btn) {
         btn.addEventListener('click', async function () {
@@ -798,7 +812,7 @@
       projectSelect.disabled = false;
     });
     // Съобщение за новите функции — веднъж скрито (клик на "Скрий"), не се показва повече никога.
-    const CHANGELOG_KEY = 'changelogDismissed_v1';
+    const CHANGELOG_KEY = 'changelogDismissed_v2';
     const changelogBanner = document.getElementById('changelogBanner');
     if (!localStorage.getItem(CHANGELOG_KEY)) {
       changelogBanner.style.display = '';
