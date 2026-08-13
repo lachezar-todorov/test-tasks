@@ -142,11 +142,12 @@ ul.tasks li:hover{background:#fafaf6;}
 .comment-like-has{background:transparent;color:var(--brand-orange-dark);border-color:var(--brand-orange);font-weight:600;}
 .comment-like-mine{background:var(--brand-orange);color:#fff;border-color:var(--brand-orange);font-weight:700;}
 .comment-like-mine:hover{background:var(--brand-orange-dark);border-color:var(--brand-orange-dark);color:#fff;}
-.comment-edit-row{display:flex;gap:6px;margin-top:2px;flex-wrap:wrap;}
-.comment-edit-row input[type=text]{flex:1 1 160px;padding:6px 8px;font-size:13px;}
+.comment-edit-row{display:flex;gap:6px;margin-top:2px;flex-wrap:wrap;align-items:flex-end;}
+.comment-edit-row textarea.comment-edit-text{flex:1 1 160px;padding:6px 8px;font-size:13px;}
 .comment-empty{color:var(--muted);font-size:12px;font-style:italic;}
-.comment-add{display:flex;gap:8px;flex-wrap:wrap;}
-.comment-add input{flex:1 1 140px;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;}
+.comment-add{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;}
+.comment-add textarea,.comment-edit-row textarea{min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;resize:none;overflow:hidden;line-height:1.4;white-space:pre-wrap;word-break:break-word;}
+.comment-add textarea{flex:1 1 140px;}
 .comment-add .btn-ghost{color:var(--teal-dark);}
 .comment-add .btn-ghost:hover{background:var(--teal-soft);}
 
