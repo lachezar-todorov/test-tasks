@@ -11,7 +11,7 @@
     <img class="site-logo" src="logo.svg" alt="" onerror="this.style.display='none'">
   </div>
   <div class="changelog-banner" id="changelogBanner" style="display:none;">
-    <div class="changelog-text">🆕 <strong>НОВО!</strong> В страницата на календара, вече може подробно да бъде отворен конкретен ден и да се добави час или бележка от собственика на задачата! Може да се филтрират задачите по проект.</div>
+    <div class="changelog-text">🆕 <strong>НОВО!</strong> В страницата на календара, вече може подробно да бъде отворен конкретен ден и да се добави час или бележка от собственика на задачата! Може да се филтрират задачите по проект. Вече има личен календар и могат да се добавят собствени задачи, които са отделно от административния календар.</div>
     <button type="button" class="btn-ghost" id="changelogDismiss">Скрий</button>
   </div>
 
@@ -295,7 +295,8 @@
           markReadBtnHtml(t) +
           commentToggleBtn(t) +
           (!editable ? (personalCalRevealed.has(t.id)
-            ? '<label class="important-check personal-cal-toggle-label"><input type="checkbox" class="personal-cal-toggle" data-id="' + esc(t.id) + '"' + (t.inPersonalCalendar ? ' checked' : '') + '> Личен календар</label>'
+            ? '<span class="personal-cal-toggle-wrap"><label class="important-check personal-cal-toggle-label"><input type="checkbox" class="personal-cal-toggle" data-id="' + esc(t.id) + '"' + (t.inPersonalCalendar ? ' checked' : '') + '> Личен календар</label>' +
+              '<button class="btn-ghost personal-cal-hide-btn" data-personal-cal-hide="' + esc(t.id) + '" title="Отказ — скрий полето">Отказ</button></span>'
             : '<button class="btn-ghost personal-cal-reveal-btn" data-personal-cal-reveal="' + esc(t.id) + '" title="Личен календар">✎</button>') : '') +
           (editable ? '<button class="btn-ghost" data-pending-edit="' + esc(t.id) + '" title="Редактирай">✎</button>' +
             '<button class="btn-ghost" data-pending-del="' + esc(t.id) + '" title="Изтрий">✕</button>' : '') +
@@ -377,6 +378,12 @@
       scope.querySelectorAll('.personal-cal-reveal-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
           personalCalRevealed.add(btn.getAttribute('data-personal-cal-reveal'));
+          render(tasksData, pendingData, document.getElementById('nameHeader').textContent);
+        });
+      });
+      scope.querySelectorAll('.personal-cal-hide-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          personalCalRevealed.delete(btn.getAttribute('data-personal-cal-hide'));
           render(tasksData, pendingData, document.getElementById('nameHeader').textContent);
         });
       });
@@ -979,7 +986,7 @@
       projectSelect.disabled = false;
     });
     // Съобщение за новите функции — веднъж скрито (клик на "Скрий"), не се показва повече никога.
-    const CHANGELOG_KEY = 'changelogDismissed_v3';
+    const CHANGELOG_KEY = 'changelogDismissed_v4';
     const changelogBanner = document.getElementById('changelogBanner');
     if (!localStorage.getItem(CHANGELOG_KEY)) {
       changelogBanner.style.display = '';
