@@ -296,7 +296,7 @@
           commentToggleBtn(t) +
           (!editable ? (personalCalRevealed.has(t.id)
             ? '<span class="personal-cal-toggle-wrap"><label class="important-check personal-cal-toggle-label"><input type="checkbox" class="personal-cal-toggle" data-id="' + esc(t.id) + '"' + (t.inPersonalCalendar ? ' checked' : '') + '> Личен календар</label>' +
-              '<button class="btn-ghost personal-cal-hide-btn" data-personal-cal-hide="' + esc(t.id) + '" title="Отказ — скрий полето">Отказ</button></span>'
+              '<button class="btn-ghost personal-cal-hide-btn" data-personal-cal-hide="' + esc(t.id) + '" title="Скрий полето">Скрий</button></span>'
             : '<button class="btn-ghost personal-cal-reveal-btn" data-personal-cal-reveal="' + esc(t.id) + '" title="Личен календар">✎</button>') : '') +
           (editable ? '<button class="btn-ghost" data-pending-edit="' + esc(t.id) + '" title="Редактирай">✎</button>' +
             '<button class="btn-ghost" data-pending-del="' + esc(t.id) + '" title="Изтрий">✕</button>' : '') +
