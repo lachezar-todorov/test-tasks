@@ -162,6 +162,13 @@
       });
     }
 
+    // разширява textarea-та за коментари надолу вместо да остави текста да
+    // скролва настрани — прилага се и при печатане, и веднага след render()
+    function autoGrowTextarea(el) {
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    }
+
     // Apps Script понякога не отговаря навреме (бавен round-trip, timeout,
     // или табът е бил минимизиран докато е чакал) и вместо JSON връща HTML
     // грешка — това чупи res.json(). При такъв провал (или чиста мрежова
@@ -243,7 +250,7 @@
         const unread = isUnread(c);
         const cls = 'comment ' + (c.author === 'Админ' ? 'comment-admin' : 'comment-person') + (unread ? ' comment-unread' : '');
         const body = c.id === editingCommentId
-          ? '<div class="comment-edit-row"><input type="text" class="comment-edit-text" value="' + esc(c.text) + '">' +
+          ? '<div class="comment-edit-row"><textarea class="comment-edit-text" rows="1">' + esc(c.text) + '</textarea>' +
             '<button class="btn-primary comment-edit-save" data-comment="' + esc(c.id) + '">Запази</button>' +
             '<button class="btn-ghost comment-edit-cancel" data-comment="' + esc(c.id) + '">Отказ</button></div>'
           : '<div class="comment-text"><span class="comment-text-value">' + esc(c.text) +
@@ -260,7 +267,7 @@
       return '<div class="comments" id="comments-' + esc(t.id) + '" style="display:' + (open ? 'block' : 'none') + '">' +
         '<div class="comment-list">' + (list || '<div class="comment-empty">Няма коментари.</div>') + '</div>' +
         '<div class="comment-add">' +
-          '<input type="text" class="comment-input" data-task="' + esc(t.id) + '" placeholder="Коментар..." value="' + esc(draft) + '">' +
+          '<textarea class="comment-input" data-task="' + esc(t.id) + '" placeholder="Коментар..." rows="1">' + esc(draft) + '</textarea>' +
           '<button class="btn-ghost comment-send" data-task="' + esc(t.id) + '">Изпрати</button>' +
         '</div>' +
       '</div>';
@@ -800,10 +807,17 @@
           await toggleCommentLike(btn.getAttribute('data-comment-like'));
         });
       });
+      document.querySelectorAll('.comment-input, .comment-edit-text').forEach(function (el) {
+        autoGrowTextarea(el);
+      });
       document.querySelectorAll('.comment-input').forEach(function (input) {
         input.addEventListener('input', function () {
           commentDrafts[input.getAttribute('data-task')] = input.value;
+          autoGrowTextarea(input);
         });
+      });
+      document.querySelectorAll('.comment-edit-text').forEach(function (input) {
+        input.addEventListener('input', function () { autoGrowTextarea(input); });
       });
       document.querySelectorAll('.comment-send').forEach(function (btn) {
         btn.addEventListener('click', async function () {
