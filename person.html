@@ -11,7 +11,7 @@
     <img class="site-logo" src="logo.svg" alt="" onerror="this.style.display='none'">
   </div>
   <div class="changelog-banner" id="changelogBanner" style="display:none;">
-    <div class="changelog-text">🆕 <strong>НОВО!</strong> В страницата на календара, вече може подробно да бъде отворен конкретен ден и да се добави час или бележка от собственика на задачата!</div>
+    <div class="changelog-text">🆕 <strong>НОВО!</strong> В страницата на календара, вече може подробно да бъде отворен конкретен ден и да се добави час или бележка от собственика на задачата! Може да се филтрират задачите по проект.</div>
     <button type="button" class="btn-ghost" id="changelogDismiss">Скрий</button>
   </div>
 
@@ -33,6 +33,9 @@
           <button class="btn-primary" id="addBtn">Добави</button>
         </div>
         <p class="sub-note" style="padding-top:0;">Трябва да избереш поне начална или крайна дата.</p>
+        <div class="project-picker">
+          <select id="listFilter"></select>
+        </div>
         <div id="list"><div class="empty">Зареждане...</div></div>
       </div>
 
@@ -100,6 +103,8 @@
     let calMonth = (new Date()).getMonth();
     let dayModalKey = null;
     let scheduleEditingId = null;
+    let listFilter = ''; // '' = по активност (по подразбиране); иначе име на проект или NO_PROJECT_VALUE
+    const NO_PROJECT_VALUE = '__none__';
 
     // Две отделни нива на "прочетено": ниво коментар (маркира се само с клик
     // direktно върху него) и ниво задача (само "новото" на задачата — маха се
@@ -421,11 +426,25 @@
       });
     }
 
+    function listFilterOptions() {
+      return '<option value="">Активност</option>' +
+        '<option value="' + NO_PROJECT_VALUE + '">— без проект —</option>' +
+        PROJECTS.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
+    }
+
     function render(rows, pending, name) {
       if (name) { document.getElementById('nameHeader').textContent = name; myName = name; }
+      let filtered = rows || [];
+      let emptyMsg = 'Нямаш активни задачи в момента.';
+      if (listFilter) {
+        filtered = filtered.filter(function (t) {
+          return listFilter === NO_PROJECT_VALUE ? !t.project : t.project === listFilter;
+        });
+        emptyMsg = listFilter === NO_PROJECT_VALUE ? 'Нямаш активни задачи без проект.' : 'Нямаш активни задачи за този проект.';
+      }
       // важните задачи излизат отгоре, независимо от реда по активност
-      const sorted = (rows || []).slice().sort(function (a, b) { return (b.important ? 1 : 0) - (a.important ? 1 : 0); });
-      renderList('list', sorted, 'Нямаш активни задачи в момента.', false);
+      const sorted = filtered.slice().sort(function (a, b) { return (b.important ? 1 : 0) - (a.important ? 1 : 0); });
+      renderList('list', sorted, emptyMsg, false);
       renderList('pendingList', pending, 'Нямаш непотвърдени задачи в момента.', true);
     }
 
@@ -790,6 +809,11 @@
     }
 
     document.getElementById('newTaskProject').innerHTML = projectOptions();
+    document.getElementById('listFilter').innerHTML = listFilterOptions();
+    document.getElementById('listFilter').addEventListener('change', function () {
+      listFilter = this.value;
+      render(tasksData, pendingData, document.getElementById('nameHeader').textContent);
+    });
     document.getElementById('addBtn').addEventListener('click', async function () {
       const btn = document.getElementById('addBtn');
       const input = document.getElementById('newTaskText');
@@ -814,7 +838,7 @@
       projectSelect.disabled = false;
     });
     // Съобщение за новите функции — веднъж скрито (клик на "Скрий"), не се показва повече никога.
-    const CHANGELOG_KEY = 'changelogDismissed_v2';
+    const CHANGELOG_KEY = 'changelogDismissed_v3';
     const changelogBanner = document.getElementById('changelogBanner');
     if (!localStorage.getItem(CHANGELOG_KEY)) {
       changelogBanner.style.display = '';
