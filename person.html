@@ -29,6 +29,7 @@
           <textarea id="newTaskText" class="autogrow-textarea" rows="1" placeholder="Предложи си задача..."></textarea>
           <select id="newTaskProject"></select>
           <select id="newTaskType"></select>
+          <select id="newTaskCity"></select>
           <label class="date-field">От <input type="date" id="newTaskStart"></label>
           <label class="date-field">До <input type="date" id="newTaskEnd"></label>
           <span class="check-pair">
@@ -113,8 +114,18 @@
     const TASK_TYPES = ['Сервиз', 'Монтаж', 'Заваряване'];
     const TASK_TYPE_PREFIX = { 'Сервиз': 'Сервиз - ', 'Монтаж': 'Монтаж - ', 'Заваряване': 'Заваряване - ' };
     function displayTaskText(t) {
-      return (TASK_TYPE_PREFIX[t.taskType] || '') + t.text;
+      return (TASK_TYPE_PREFIX[t.taskType] || '') + (t.city ? t.city + ': ' : '') + t.text;
     }
+
+    const CITIES = [
+      'Благоевград', 'Бургас', 'Варна', 'Велико Търново',
+      'Видин', 'Враца', 'Габрово', 'Добрич',
+      'Кърджали', 'Кюстендил', 'Ловеч', 'Монтана',
+      'Пазарджик', 'Перник', 'Плевен', 'Пловдив',
+      'Разград', 'Русе', 'Силистра', 'Сливен',
+      'Смолян', 'София', 'Стара Загора', 'Търговище',
+      'Хасково', 'Шумен', 'Ямбол'
+    ];
 
     const params = new URLSearchParams(location.search);
     const u = params.get('u');
@@ -243,6 +254,12 @@
       }).join('');
     }
 
+    function cityOptions(selected) {
+      return '<option value="">— избери град —</option>' + CITIES.map(function (c) {
+        return '<option value="' + esc(c) + '"' + (c === selected ? ' selected' : '') + '>' + esc(c) + '</option>';
+      }).join('');
+    }
+
     function projectBadge(t) {
       return t.project ? '<span class="badge-project">' + esc(t.project) + '</span>' : '';
     }
@@ -286,6 +303,7 @@
         '<textarea class="edit-text autogrow-textarea" rows="1">' + esc(t.text) + '</textarea>' +
         '<select class="edit-project">' + projectOptions(t.project) + '</select>' +
         '<select class="edit-type">' + taskTypeOptions(t.taskType) + '</select>' +
+        '<select class="edit-city">' + cityOptions(t.city) + '</select>' +
         '<label class="date-field">От <input type="date" class="edit-start" value="' + esc(t.startDate || '') + '"></label>' +
         '<label class="date-field">До <input type="date" class="edit-end" value="' + esc(t.endDate || '') + '"></label>' +
         '<label class="important-check"><input type="checkbox" class="edit-important"' + (t.important ? ' checked' : '') + '> Важна</label>' +
@@ -363,6 +381,7 @@
           const textInput = li.querySelector('.edit-text');
           const projectSelect = li.querySelector('.edit-project');
           const typeSelect = li.querySelector('.edit-type');
+          const citySelect = li.querySelector('.edit-city');
           const startInput = li.querySelector('.edit-start');
           const endInput = li.querySelector('.edit-end');
           const importantCb = li.querySelector('.edit-important');
@@ -370,6 +389,7 @@
           const text = textInput.value.trim();
           const project = projectSelect.value;
           const taskType = typeSelect.value;
+          const city = citySelect.value;
           const startDate = startInput.value;
           const endDate = endInput.value;
           if (!text) return;
@@ -379,17 +399,19 @@
           textInput.disabled = true;
           projectSelect.disabled = true;
           typeSelect.disabled = true;
+          citySelect.disabled = true;
           startInput.disabled = true;
           endInput.disabled = true;
           importantCb.disabled = true;
           personalCalendarCb.disabled = true;
-          await editPendingTask(btn.getAttribute('data-id'), text, project, importantCb.checked, personalCalendarCb.checked, startDate, endDate, taskType);
+          await editPendingTask(btn.getAttribute('data-id'), text, project, importantCb.checked, personalCalendarCb.checked, startDate, endDate, taskType, city);
           if (document.body.contains(btn)) {
             btn.disabled = false;
             btn.textContent = 'Запази';
             textInput.disabled = false;
             projectSelect.disabled = false;
             typeSelect.disabled = false;
+            citySelect.disabled = false;
             startInput.disabled = false;
             endInput.disabled = false;
             importantCb.disabled = false;
@@ -876,11 +898,13 @@
       const personalCalendar = document.getElementById('newTaskPersonalCalendar').checked;
       const project = document.getElementById('newTaskProject').value;
       const taskType = document.getElementById('newTaskType').value;
+      const city = document.getElementById('newTaskCity').value;
       const startDate = document.getElementById('newTaskStart').value;
       const endDate = document.getElementById('newTaskEnd').value;
       if (!startDate && !endDate) { alert('Избери поне начална или крайна дата.'); return; }
+      if (!city) { alert('Избери град.'); return; }
       try {
-        const data = await apiPost('personAddTask', { text: text, important: important, personalCalendar: personalCalendar, project: project, taskType: taskType, startDate: startDate, endDate: endDate });
+        const data = await apiPost('personAddTask', { text: text, important: important, personalCalendar: personalCalendar, project: project, taskType: taskType, city: city, startDate: startDate, endDate: endDate });
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         const created = (data.pendingTasks || []).find(function (t) { return t.text === text; });
         if (created) markTaskOpened(created);
@@ -891,6 +915,7 @@
         document.getElementById('newTaskPersonalCalendar').checked = false;
         document.getElementById('newTaskProject').value = '';
         document.getElementById('newTaskType').value = '';
+        document.getElementById('newTaskCity').value = '';
         document.getElementById('newTaskStart').value = '';
         document.getElementById('newTaskEnd').value = '';
       } catch (err) {
@@ -898,9 +923,9 @@
       }
     }
 
-    async function editPendingTask(id, text, project, important, personalCalendar, startDate, endDate, taskType) {
+    async function editPendingTask(id, text, project, important, personalCalendar, startDate, endDate, taskType, city) {
       try {
-        const data = await apiPost('personEditTask', { id: id, text: text, project: project, important: important, personalCalendar: personalCalendar, startDate: startDate, endDate: endDate, taskType: taskType });
+        const data = await apiPost('personEditTask', { id: id, text: text, project: project, important: important, personalCalendar: personalCalendar, startDate: startDate, endDate: endDate, taskType: taskType, city: city });
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         editingPendingId = null;
         applyData(data);
@@ -976,6 +1001,7 @@
 
     document.getElementById('newTaskProject').innerHTML = projectOptions();
     document.getElementById('newTaskType').innerHTML = taskTypeOptions();
+    document.getElementById('newTaskCity').innerHTML = cityOptions();
     document.getElementById('newTaskText').addEventListener('input', function () { autoGrowTextarea(this); });
     // на всяко зареждане на страницата филтърът тръгва от "Активност",
     // без значение какво е било избрано преди — не се пази в localStorage
@@ -991,6 +1017,7 @@
       const personalCalendarCb = document.getElementById('newTaskPersonalCalendar');
       const projectSelect = document.getElementById('newTaskProject');
       const typeSelect = document.getElementById('newTaskType');
+      const citySelect = document.getElementById('newTaskCity');
       const startInput = document.getElementById('newTaskStart');
       const endInput = document.getElementById('newTaskEnd');
       btn.disabled = true;
@@ -1000,6 +1027,7 @@
       personalCalendarCb.disabled = true;
       projectSelect.disabled = true;
       typeSelect.disabled = true;
+      citySelect.disabled = true;
       startInput.disabled = true;
       endInput.disabled = true;
       await addTask();
@@ -1012,6 +1040,7 @@
       endInput.disabled = false;
       projectSelect.disabled = false;
       typeSelect.disabled = false;
+      citySelect.disabled = false;
     });
     // Съобщение за новите функции — веднъж скрито (клик на "Скрий"), не се показва повече никога.
     const CHANGELOG_KEY = 'changelogDismissed_v4';
