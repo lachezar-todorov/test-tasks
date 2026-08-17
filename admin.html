@@ -564,7 +564,10 @@
         exportBtn.disabled = true;
         return;
       }
-      let rows = data;
+      // "Изтегляне на задачи" е за одобрени задачи — чакащите одобрение
+      // не се показват тук (и съответно не се и изтеглят); одобряването
+      // им си остава през таб "Табло".
+      let rows = data.filter(function (t) { return t.status !== 'Чака одобрение'; });
       if (selectedProject) {
         rows = selectedProject === NO_PROJECT_VALUE
           ? rows.filter(function (t) { return !t.project; })
