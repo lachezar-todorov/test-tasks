@@ -20,6 +20,7 @@
       <button type="button" class="tab-btn active" id="tabPersonal">Лично табло</button>
       <button type="button" class="tab-btn" id="tabCalendarPerson">Админ. календар</button>
       <button type="button" class="tab-btn" id="tabPersonalCalendarPerson">Личен календар</button>
+      <button type="button" class="tab-btn" id="tabExportPerson">Изтегляне на задачи</button>
     </div>
     <div id="personalView">
       <div class="card person" style="margin:8px auto 0;">
@@ -73,6 +74,21 @@
           <button type="button" class="btn-ghost" id="calNextPersonalPerson">Следващ ›</button>
         </div>
         <div id="calendarGridPersonalPerson" class="calendar-grid-wrap"></div>
+      </div>
+    </div>
+    <div id="exportViewPerson" style="display:none;">
+      <div class="card" style="max-width:none;margin-top:8px;">
+        <h2>Изтегляне на задачи</h2>
+        <p class="sub-note">Само твоите одобрени задачи — неодобрените не се показват тук.</p>
+        <div class="project-picker">
+          <select id="exportProjectFilter"></select>
+          <select id="exportTaskTypeFilter"></select>
+          <select id="exportCityFilter"></select>
+        </div>
+        <div class="addrow" style="padding-top:0;">
+          <button class="btn-primary" id="exportTaskListBtn" disabled>Изтегляне</button>
+        </div>
+        <div id="exportTaskList"><div class="empty">Избери проект, вид задача и/или град отгоре, за да видиш задачите си.</div></div>
       </div>
     </div>
   </div>
@@ -147,6 +163,9 @@
     let scheduleEditingId = null;
     let listFilter = ''; // '' = по активност (по подразбиране); иначе име на проект или NO_PROJECT_VALUE
     const NO_PROJECT_VALUE = '__none__';
+    let exportProject = '';
+    let exportTaskType = '';
+    let exportCity = '';
 
     // Две отделни нива на "прочетено": ниво коментар (маркира се само с клик
     // direktно върху него) и ниво задача (само "новото" на задачата — маха се
@@ -259,6 +278,9 @@
         return '<option value="' + esc(c) + '"' + (c === selected ? ' selected' : '') + '>' + esc(c) + '</option>';
       }).join('');
     }
+
+    const NO_TASK_TYPE_VALUE = '__notype__';
+    const NO_CITY_VALUE = '__nocity__';
 
     function projectBadge(t) {
       return t.project ? '<span class="badge-project">' + esc(t.project) + '</span>' : '';
@@ -562,6 +584,99 @@
       const sorted = filtered.slice().sort(function (a, b) { return (b.important ? 1 : 0) - (a.important ? 1 : 0); });
       renderList('list', sorted, emptyMsg, false);
       renderList('pendingList', pending, 'Нямаш непотвърдени задачи в момента.', true);
+      renderExportView();
+    }
+
+    // Падащите менюта в "Изтегляне на задачи" изброяват само стойности,
+    // за които собственикът действително има поне една задача — по същия
+    // начин, както филтъра по проект в "Лично табло" (listFilterOptions).
+    function exportProjectFilterOptions(rows) {
+      const inUse = [];
+      let hasNone = false;
+      (rows || []).forEach(function (t) {
+        if (t.project) { if (inUse.indexOf(t.project) === -1) inUse.push(t.project); }
+        else hasNone = true;
+      });
+      inUse.sort(function (a, b) { return PROJECTS.indexOf(a) - PROJECTS.indexOf(b); });
+      return '<option value="">Всички проекти</option>' +
+        (hasNone ? '<option value="' + NO_PROJECT_VALUE + '">— без проект —</option>' : '') +
+        inUse.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
+    }
+
+    function exportTaskTypeFilterOptions(rows) {
+      const inUse = [];
+      let hasNone = false;
+      (rows || []).forEach(function (t) {
+        if (t.taskType) { if (inUse.indexOf(t.taskType) === -1) inUse.push(t.taskType); }
+        else hasNone = true;
+      });
+      inUse.sort(function (a, b) { return TASK_TYPES.indexOf(a) - TASK_TYPES.indexOf(b); });
+      return '<option value="">Всички видове</option>' +
+        (hasNone ? '<option value="' + NO_TASK_TYPE_VALUE + '">без категория</option>' : '') +
+        inUse.map(function (tt) { return '<option value="' + esc(tt) + '">' + esc(tt) + '</option>'; }).join('');
+    }
+
+    function exportCityFilterOptions(rows) {
+      const inUse = [];
+      let hasNone = false;
+      (rows || []).forEach(function (t) {
+        if (t.city) { if (inUse.indexOf(t.city) === -1) inUse.push(t.city); }
+        else hasNone = true;
+      });
+      inUse.sort(function (a, b) { return CITIES.indexOf(a) - CITIES.indexOf(b); });
+      return '<option value="">Всички градове</option>' +
+        (hasNone ? '<option value="' + NO_CITY_VALUE + '">без град</option>' : '') +
+        inUse.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
+    }
+
+    // Таб "Изтегляне на задачи" — само собствените ОДОБРЕНИ задачи
+    // (tasksData вече изключва чакащите одобрение), филтрирани по
+    // проект/вид задача/град; чисто за преглед и износ — без редакция,
+    // по същата логика, че одобрени задачи не могат да се редактират от
+    // личния панел.
+    function renderExportView() {
+      const listEl = document.getElementById('exportTaskList');
+      const btn = document.getElementById('exportTaskListBtn');
+      if (!listEl || !btn) return;
+
+      const projectSelect = document.getElementById('exportProjectFilter');
+      const typeSelect = document.getElementById('exportTaskTypeFilter');
+      const citySelect = document.getElementById('exportCityFilter');
+      projectSelect.innerHTML = exportProjectFilterOptions(tasksData);
+      typeSelect.innerHTML = exportTaskTypeFilterOptions(tasksData);
+      citySelect.innerHTML = exportCityFilterOptions(tasksData);
+      // ако вече избраната стойност е изчезнала (напр. последната задача
+      // от този проект е приключена/премахната), пада обратно на "Всички"
+      if (exportProject && projectSelect.querySelector('option[value="' + CSS.escape(exportProject) + '"]') === null) exportProject = '';
+      if (exportTaskType && typeSelect.querySelector('option[value="' + CSS.escape(exportTaskType) + '"]') === null) exportTaskType = '';
+      if (exportCity && citySelect.querySelector('option[value="' + CSS.escape(exportCity) + '"]') === null) exportCity = '';
+      projectSelect.value = exportProject;
+      typeSelect.value = exportTaskType;
+      citySelect.value = exportCity;
+
+      if (!exportProject && !exportTaskType && !exportCity) {
+        listEl.innerHTML = '<div class="empty">Избери проект, вид задача и/или град отгоре, за да видиш задачите си.</div>';
+        btn.disabled = true;
+        return;
+      }
+      let rows = tasksData;
+      if (exportProject === NO_PROJECT_VALUE) rows = rows.filter(function (t) { return !t.project; });
+      else if (exportProject) rows = rows.filter(function (t) { return t.project === exportProject; });
+      if (exportTaskType === NO_TASK_TYPE_VALUE) rows = rows.filter(function (t) { return !t.taskType; });
+      else if (exportTaskType) rows = rows.filter(function (t) { return t.taskType === exportTaskType; });
+      if (exportCity === NO_CITY_VALUE) rows = rows.filter(function (t) { return !t.city; });
+      else if (exportCity) rows = rows.filter(function (t) { return t.city === exportCity; });
+      if (!rows.length) {
+        listEl.innerHTML = '<div class="empty">Няма задачи за избрания филтър.</div>';
+        btn.disabled = true;
+        return;
+      }
+      btn.disabled = false;
+      listEl.innerHTML = '<ul class="tasks">' + rows.map(function (t) {
+        return '<li data-id="' + esc(t.id) + '"><div class="task-row">' +
+          projectBadge(t) + dateBadge(t) + taskTextHtml(t) +
+          '</div></li>';
+      }).join('') + '</ul>';
     }
 
     const WEEKDAY_NAMES = ['Пон', 'Вт', 'Ср', 'Чет', 'Пет', 'Съб', 'Нед'];
@@ -999,6 +1114,38 @@
       }
     }
 
+    function downloadXlsxFromBase64(base64, filename) {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || 'zadachi.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function exportPersonTaskList() {
+      const btn = document.getElementById('exportTaskListBtn');
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Подготвя се...';
+      try {
+        const res = await apiPost('exportTaskListXlsx', { project: exportProject, taskType: exportTaskType, city: exportCity });
+        if (res.ok === false) { alert('Грешка: ' + res.error); return; }
+        downloadXlsxFromBase64(res.base64, res.filename);
+      } catch (err) {
+        alert('Грешка при връзка със сървъра.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    }
+
     document.getElementById('newTaskProject').innerHTML = projectOptions();
     document.getElementById('newTaskType').innerHTML = taskTypeOptions();
     document.getElementById('newTaskCity').innerHTML = cityOptions();
@@ -1056,7 +1203,8 @@
     const personTabs = [
       { btn: document.getElementById('tabPersonal'), view: document.getElementById('personalView') },
       { btn: document.getElementById('tabCalendarPerson'), view: document.getElementById('calendarViewPerson') },
-      { btn: document.getElementById('tabPersonalCalendarPerson'), view: document.getElementById('personalCalendarViewPerson') }
+      { btn: document.getElementById('tabPersonalCalendarPerson'), view: document.getElementById('personalCalendarViewPerson') },
+      { btn: document.getElementById('tabExportPerson'), view: document.getElementById('exportViewPerson') }
     ];
     personTabs.forEach(function (tab) {
       tab.btn.addEventListener('click', function () {
@@ -1089,6 +1237,20 @@
       renderCalendarPersonal();
     });
     renderCalendarPersonal();
+
+    document.getElementById('exportProjectFilter').addEventListener('change', function () {
+      exportProject = this.value;
+      renderExportView();
+    });
+    document.getElementById('exportTaskTypeFilter').addEventListener('change', function () {
+      exportTaskType = this.value;
+      renderExportView();
+    });
+    document.getElementById('exportCityFilter').addEventListener('change', function () {
+      exportCity = this.value;
+      renderExportView();
+    });
+    document.getElementById('exportTaskListBtn').addEventListener('click', exportPersonTaskList);
 
     document.getElementById('dayModalClose').addEventListener('click', closeDayModal);
     document.getElementById('dayModalOverlay').addEventListener('click', function (e) {
