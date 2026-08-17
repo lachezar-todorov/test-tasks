@@ -37,7 +37,7 @@
           </span>
           <button class="btn-primary" id="addBtn">Добави</button>
         </div>
-        <p class="sub-note" style="padding-top:0;">Трябва да избереш поне начална или крайна дата.</p>
+        <p class="sub-note" style="padding-top:0;">Трябва задължително да избереш град и поне начална или крайна дата.</p>
       </div>
       <div class="card important-card" id="importantCard"></div>
       <div class="card pending-card" id="approvalCard"></div>
@@ -1363,25 +1363,21 @@
       PROJECTS.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
     document.getElementById('projectSelect').addEventListener('change', function () {
       selectedProject = this.value;
-      renderProjectsView();
-      attachHandlers();
+      render();
     });
     document.getElementById('projectSort').addEventListener('change', function () {
       projectSort = this.value;
-      renderProjectsView();
-      attachHandlers();
+      render();
     });
     document.getElementById('projectTaskTypeFilter').innerHTML = taskTypeFilterOptions();
     document.getElementById('projectTaskTypeFilter').addEventListener('change', function () {
       selectedTaskTypeFilter = this.value;
-      renderProjectsView();
-      attachHandlers();
+      render();
     });
     document.getElementById('projectCityFilter').innerHTML = cityFilterOptions();
     document.getElementById('projectCityFilter').addEventListener('change', function () {
       selectedCityFilter = this.value;
-      renderProjectsView();
-      attachHandlers();
+      render();
     });
     document.getElementById('calPrev').addEventListener('click', function () {
       calMonth--;
