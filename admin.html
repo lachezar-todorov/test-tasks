@@ -15,7 +15,7 @@
   <div class="wrap">
     <div class="tabs">
       <button type="button" class="tab-btn active" id="tabDashboard">Табло</button>
-      <button type="button" class="tab-btn" id="tabProjects">Проекти</button>
+      <button type="button" class="tab-btn" id="tabProjects">Изтегляне на задачи</button>
       <button type="button" class="tab-btn" id="tabCalendar">Админ. календар</button>
       <button type="button" class="tab-btn" id="tabPersonalCalendars">Лични календари</button>
     </div>
@@ -50,7 +50,7 @@
     </div>
     <div id="projectsView" style="display:none;">
       <div class="card">
-        <h2>Проекти</h2>
+        <h2>Изтегляне на задачи</h2>
         <div class="project-picker">
           <select id="projectSelect"></select>
           <select id="projectSort">
@@ -60,6 +60,9 @@
           </select>
           <select id="projectTaskTypeFilter"></select>
           <select id="projectCityFilter"></select>
+        </div>
+        <div class="addrow" style="padding-top:0;">
+          <button class="btn-primary" id="projectExportBtn" disabled>Изтегляне</button>
         </div>
         <div id="projectTaskList"><div class="empty">Избери проект отгоре, за да видиш задачите му.</div></div>
       </div>
@@ -555,8 +558,10 @@
 
     function renderProjectsView() {
       const listEl = document.getElementById('projectTaskList');
+      const exportBtn = document.getElementById('projectExportBtn');
       if (!selectedProject && !selectedTaskTypeFilter && !selectedCityFilter) {
         listEl.innerHTML = '<div class="empty">Избери проект, вид задача и/или град отгоре, за да видиш задачите.</div>';
+        exportBtn.disabled = true;
         return;
       }
       let rows = data;
@@ -578,8 +583,10 @@
       rows = sortProjectRows(rows, projectSort);
       if (!rows.length) {
         listEl.innerHTML = '<div class="empty">Няма задачи за избрания филтър.</div>';
+        exportBtn.disabled = true;
         return;
       }
+      exportBtn.disabled = false;
       // ако е избран само град, без конкретен вид задача — групира по вид
       // (Сервиз/Монтаж/Заваряване/без категория), а не по изпълнител, за да
       // се виждат събрани всички сервизни, после всички монтажни и т.н.
@@ -1252,6 +1259,21 @@
       } catch (err) { onError(err); }
     }
 
+    function downloadXlsxFromBase64(base64, filename) {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || 'zadachi.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
     async function exportDayTasks() {
       if (!dayModalKey) return;
       const btn = document.getElementById('dayModalExportBtn');
@@ -1261,18 +1283,22 @@
       try {
         const res = await apiPost('exportDayTasks', { date: dayModalKey });
         if (res.ok === false) { onError({ message: res.error }); return; }
-        const binary = atob(res.base64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = res.filename || 'zadachi.xlsx';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
+        downloadXlsxFromBase64(res.base64, res.filename);
+      } catch (err) { onError(err); } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    }
+
+    async function exportProjectTasks() {
+      const btn = document.getElementById('projectExportBtn');
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Подготвя се...';
+      try {
+        const res = await apiPost('exportTaskListXlsx', { project: selectedProject, taskType: selectedTaskTypeFilter, city: selectedCityFilter });
+        if (res.ok === false) { onError({ message: res.error }); return; }
+        downloadXlsxFromBase64(res.base64, res.filename);
       } catch (err) { onError(err); } finally {
         btn.disabled = false;
         btn.textContent = original;
@@ -1379,6 +1405,7 @@
       selectedCityFilter = this.value;
       render();
     });
+    document.getElementById('projectExportBtn').addEventListener('click', exportProjectTasks);
     document.getElementById('calPrev').addEventListener('click', function () {
       calMonth--;
       if (calMonth < 0) { calMonth = 11; calYear--; }
