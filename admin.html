@@ -1054,7 +1054,7 @@
       });
       document.querySelectorAll('.comment[data-comment-id]').forEach(function (el) {
         el.addEventListener('click', function (e) {
-          if (e.target.closest('button, input')) return;
+          if (e.target.closest('button, input, textarea')) return;
           markCommentSeen(el.getAttribute('data-comment-id'));
           render();
         });
