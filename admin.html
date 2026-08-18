@@ -27,6 +27,7 @@
           <select id="newTaskWho"></select>
           <select id="newTaskProject"></select>
           <select id="newTaskType"></select>
+          <select id="newTaskShop" style="display:none;"></select>
           <select id="newTaskCity"></select>
           <label class="date-field">От <input type="date" id="newTaskStart"></label>
           <label class="date-field">До <input type="date" id="newTaskEnd"></label>
@@ -139,11 +140,13 @@
       'Сънотех'
     ];
 
-    const TASK_TYPES = ['Сервиз', 'Монтаж', 'Заваряване', 'Профилактика', 'Оглед'];
-    const TASK_TYPE_PREFIX = { 'Сервиз': 'Сервиз - ', 'Монтаж': 'Монтаж - ', 'Заваряване': 'Заваряване - ', 'Профилактика': 'Профилактика - ', 'Оглед': 'Оглед - ' };
+    const TASK_TYPES = ['Сервиз', 'Монтаж', 'Заваряване', 'Профилактика', 'Оглед', 'Транспорт', 'Покупка'];
+    const TASK_TYPE_PREFIX = { 'Сервиз': 'Сервиз - ', 'Монтаж': 'Монтаж - ', 'Заваряване': 'Заваряване - ', 'Профилактика': 'Профилактика - ', 'Оглед': 'Оглед - ', 'Транспорт': 'Транспорт - ', 'Покупка': 'Покупка - ' };
+    const SHOPS = ['Пасадор', 'Интеза', 'Мезенбург', 'Иигъл Трейд', 'Одекс', 'Метал М', 'Миланов и син', 'Илпени'];
     const ALL_CITIES_OPTION = 'Всички градове';
     function displayTaskText(t) {
-      return (TASK_TYPE_PREFIX[t.taskType] || '') + (t.city ? t.city + ': ' : '') + t.text;
+      const shopPart = (t.taskType === 'Покупка' && t.shop) ? t.shop + ': ' : '';
+      return (TASK_TYPE_PREFIX[t.taskType] || '') + (t.city ? t.city + ': ' : '') + shopPart + t.text;
     }
 
     const CITIES = [
@@ -285,6 +288,20 @@
       }).join('');
     }
 
+    function shopOptions(selected) {
+      return '<option value="">— избери магазин —</option>' + SHOPS.map(function (s) {
+        return '<option value="' + esc(s) + '"' + (s === selected ? ' selected' : '') + '>' + esc(s) + '</option>';
+      }).join('');
+    }
+
+    // Полето "Магазин" се показва само когато вид задача е "Покупка" —
+    // общ помощник, ползван и от формата за нова задача, и от редакция.
+    function updateShopVisibility(typeSelect, shopSelect) {
+      const show = typeSelect.value === 'Покупка';
+      shopSelect.style.display = show ? '' : 'none';
+      if (!show) shopSelect.value = '';
+    }
+
     const NO_TASK_TYPE_VALUE = '__notype__';
 
     function taskTypeFilterOptions(selected) {
@@ -402,6 +419,7 @@
         '<select class="edit-assignee">' + peopleOptions(t.assignee) + '</select>' +
         '<select class="edit-project">' + projectOptions(t.project) + '</select>' +
         '<select class="edit-type">' + taskTypeOptions(t.taskType) + '</select>' +
+        '<select class="edit-shop" style="display:' + (t.taskType === 'Покупка' ? '' : 'none') + '">' + shopOptions(t.shop) + '</select>' +
         '<select class="edit-city">' + cityOptions(t.city) + '</select>' +
         '<label class="date-field">От <input type="date" class="edit-start" value="' + esc(t.startDate || '') + '"></label>' +
         '<label class="date-field">До <input type="date" class="edit-end" value="' + esc(t.endDate || '') + '"></label>' +
@@ -954,6 +972,11 @@
       document.querySelectorAll('.edit-cancel').forEach(function (btn) {
         btn.addEventListener('click', function () { editingId = null; render(); });
       });
+      document.querySelectorAll('.edit-type').forEach(function (sel) {
+        sel.addEventListener('change', function () {
+          updateShopVisibility(this, this.closest('.edit-row').querySelector('.edit-shop'));
+        });
+      });
       document.querySelectorAll('.edit-save').forEach(function (btn) {
         btn.addEventListener('click', async function () {
           const li = btn.closest('li');
@@ -961,6 +984,7 @@
           const assigneeSelect = li.querySelector('.edit-assignee');
           const projectSelect = li.querySelector('.edit-project');
           const typeSelect = li.querySelector('.edit-type');
+          const shopSelect = li.querySelector('.edit-shop');
           const citySelect = li.querySelector('.edit-city');
           const startInput = li.querySelector('.edit-start');
           const endInput = li.querySelector('.edit-end');
@@ -971,6 +995,7 @@
           const assignee = assigneeSelect.value;
           const project = projectSelect.value;
           const taskType = typeSelect.value;
+          const shop = taskType === 'Покупка' ? shopSelect.value : '';
           const city = citySelect.value;
           const startDate = startInput.value;
           const endDate = endInput.value;
@@ -981,13 +1006,14 @@
           assigneeSelect.disabled = true;
           projectSelect.disabled = true;
           typeSelect.disabled = true;
+          shopSelect.disabled = true;
           citySelect.disabled = true;
           startInput.disabled = true;
           endInput.disabled = true;
           importantCb.disabled = true;
           inCalendarCb.disabled = true;
           personalCalendarCb.disabled = true;
-          await editTask(btn.getAttribute('data-id'), text, assignee, importantCb.checked, project, startDate, endDate, inCalendarCb.checked, personalCalendarCb.checked, taskType, city);
+          await editTask(btn.getAttribute('data-id'), text, assignee, importantCb.checked, project, startDate, endDate, inCalendarCb.checked, personalCalendarCb.checked, taskType, city, shop);
           if (document.body.contains(btn)) {
             btn.disabled = false;
             btn.textContent = 'Запази';
@@ -995,6 +1021,7 @@
             assigneeSelect.disabled = false;
             projectSelect.disabled = false;
             typeSelect.disabled = false;
+            shopSelect.disabled = false;
             citySelect.disabled = false;
             startInput.disabled = false;
             endInput.disabled = false;
@@ -1149,6 +1176,7 @@
       const who = document.getElementById('newTaskWho').value;
       const project = document.getElementById('newTaskProject').value;
       const taskType = document.getElementById('newTaskType').value;
+      const shop = taskType === 'Покупка' ? document.getElementById('newTaskShop').value : '';
       const city = document.getElementById('newTaskCity').value;
       const startDate = document.getElementById('newTaskStart').value;
       const endDate = document.getElementById('newTaskEnd').value;
@@ -1159,7 +1187,7 @@
       if (!startDate && !endDate) { alert('Избери поне начална или крайна дата.'); return; }
       if (!city) { alert('Избери град.'); return; }
       try {
-        const res = await apiPost('addTask', { text: text, assignee: who, important: important, project: project, taskType: taskType, city: city, startDate: startDate, endDate: endDate, inCalendar: inCalendar, personalCalendar: personalCalendar });
+        const res = await apiPost('addTask', { text: text, assignee: who, important: important, project: project, taskType: taskType, shop: shop, city: city, startDate: startDate, endDate: endDate, inCalendar: inCalendar, personalCalendar: personalCalendar });
         if (res.ok === false) { onError({ message: res.error }); return; }
         const created = (res.tasks || []).find(function (t) { return t.text === text && t.assignee === who; });
         if (created) markTaskOpened(created);
@@ -1171,15 +1199,17 @@
         document.getElementById('newTaskPersonalCalendar').checked = false;
         document.getElementById('newTaskProject').value = '';
         document.getElementById('newTaskType').value = '';
+        document.getElementById('newTaskShop').value = '';
+        document.getElementById('newTaskShop').style.display = 'none';
         document.getElementById('newTaskCity').value = '';
         document.getElementById('newTaskStart').value = '';
         document.getElementById('newTaskEnd').value = '';
       } catch (err) { onError(err); }
     }
 
-    async function editTask(id, text, assignee, important, project, startDate, endDate, inCalendar, personalCalendar, taskType, city) {
+    async function editTask(id, text, assignee, important, project, startDate, endDate, inCalendar, personalCalendar, taskType, city, shop) {
       try {
-        const res = await apiPost('editTask', { id: id, text: text, assignee: assignee, important: important, project: project, startDate: startDate, endDate: endDate, inCalendar: inCalendar, personalCalendar: personalCalendar, taskType: taskType, city: city });
+        const res = await apiPost('editTask', { id: id, text: text, assignee: assignee, important: important, project: project, startDate: startDate, endDate: endDate, inCalendar: inCalendar, personalCalendar: personalCalendar, taskType: taskType, city: city, shop: shop });
         if (res.ok === false) { onError({ message: res.error }); return; }
         editingId = null;
         applyData(res);
@@ -1334,7 +1364,11 @@
     document.getElementById('newTaskWho').innerHTML = peopleOptions();
     document.getElementById('newTaskProject').innerHTML = projectOptions();
     document.getElementById('newTaskType').innerHTML = taskTypeOptions();
+    document.getElementById('newTaskShop').innerHTML = shopOptions();
     document.getElementById('newTaskCity').innerHTML = cityOptions();
+    document.getElementById('newTaskType').addEventListener('change', function () {
+      updateShopVisibility(this, document.getElementById('newTaskShop'));
+    });
     document.getElementById('newTaskText').addEventListener('input', function () { autoGrowTextarea(this); });
     document.getElementById('addBtn').addEventListener('click', async function () {
       const btn = document.getElementById('addBtn');
@@ -1344,6 +1378,7 @@
       const personalCalendarCb = document.getElementById('newTaskPersonalCalendar');
       const projectSelect = document.getElementById('newTaskProject');
       const typeSelect = document.getElementById('newTaskType');
+      const shopSelect = document.getElementById('newTaskShop');
       const citySelect = document.getElementById('newTaskCity');
       const startInput = document.getElementById('newTaskStart');
       const endInput = document.getElementById('newTaskEnd');
@@ -1355,6 +1390,7 @@
       personalCalendarCb.disabled = true;
       projectSelect.disabled = true;
       typeSelect.disabled = true;
+      shopSelect.disabled = true;
       citySelect.disabled = true;
       startInput.disabled = true;
       endInput.disabled = true;
@@ -1367,6 +1403,7 @@
       personalCalendarCb.disabled = false;
       projectSelect.disabled = false;
       typeSelect.disabled = false;
+      shopSelect.disabled = false;
       citySelect.disabled = false;
       startInput.disabled = false;
       endInput.disabled = false;
