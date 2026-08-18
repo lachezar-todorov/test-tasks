@@ -30,6 +30,7 @@
           <textarea id="newTaskText" class="autogrow-textarea" rows="1" placeholder="Предложи си задача..."></textarea>
           <select id="newTaskProject"></select>
           <select id="newTaskType"></select>
+          <select id="newTaskShop" style="display:none;"></select>
           <select id="newTaskCity"></select>
           <label class="date-field">От <input type="date" id="newTaskStart"></label>
           <label class="date-field">До <input type="date" id="newTaskEnd"></label>
@@ -127,11 +128,13 @@
       'Сънотех'
     ];
 
-    const TASK_TYPES = ['Сервиз', 'Монтаж', 'Заваряване', 'Профилактика', 'Оглед'];
-    const TASK_TYPE_PREFIX = { 'Сервиз': 'Сервиз - ', 'Монтаж': 'Монтаж - ', 'Заваряване': 'Заваряване - ', 'Профилактика': 'Профилактика - ', 'Оглед': 'Оглед - ' };
+    const TASK_TYPES = ['Сервиз', 'Монтаж', 'Заваряване', 'Профилактика', 'Оглед', 'Транспорт', 'Покупка'];
+    const TASK_TYPE_PREFIX = { 'Сервиз': 'Сервиз - ', 'Монтаж': 'Монтаж - ', 'Заваряване': 'Заваряване - ', 'Профилактика': 'Профилактика - ', 'Оглед': 'Оглед - ', 'Транспорт': 'Транспорт - ', 'Покупка': 'Покупка - ' };
+    const SHOPS = ['Пасадор', 'Интеза', 'Мезенбург', 'Иигъл Трейд', 'Одекс', 'Метал М', 'Миланов и син', 'Илпени'];
     const ALL_CITIES_OPTION = 'Всички градове';
     function displayTaskText(t) {
-      return (TASK_TYPE_PREFIX[t.taskType] || '') + (t.city ? t.city + ': ' : '') + t.text;
+      const shopPart = (t.taskType === 'Покупка' && t.shop) ? t.shop + ': ' : '';
+      return (TASK_TYPE_PREFIX[t.taskType] || '') + (t.city ? t.city + ': ' : '') + shopPart + t.text;
     }
 
     const CITIES = [
@@ -275,6 +278,19 @@
       }).join('');
     }
 
+    function shopOptions(selected) {
+      return '<option value="">— избери магазин —</option>' + SHOPS.map(function (s) {
+        return '<option value="' + esc(s) + '"' + (s === selected ? ' selected' : '') + '>' + esc(s) + '</option>';
+      }).join('');
+    }
+
+    // Полето "Магазин" се показва само когато вид задача е "Покупка".
+    function updateShopVisibility(typeSelect, shopSelect) {
+      const show = typeSelect.value === 'Покупка';
+      shopSelect.style.display = show ? '' : 'none';
+      if (!show) shopSelect.value = '';
+    }
+
     function cityOptions(selected) {
       return '<option value="">— избери град —</option>' + CITIES.map(function (c) {
         return '<option value="' + esc(c) + '"' + (c === selected ? ' selected' : '') + '>' + esc(c) + '</option>';
@@ -328,6 +344,7 @@
         '<textarea class="edit-text autogrow-textarea" rows="1">' + esc(t.text) + '</textarea>' +
         '<select class="edit-project">' + projectOptions(t.project) + '</select>' +
         '<select class="edit-type">' + taskTypeOptions(t.taskType) + '</select>' +
+        '<select class="edit-shop" style="display:' + (t.taskType === 'Покупка' ? '' : 'none') + '">' + shopOptions(t.shop) + '</select>' +
         '<select class="edit-city">' + cityOptions(t.city) + '</select>' +
         '<label class="date-field">От <input type="date" class="edit-start" value="' + esc(t.startDate || '') + '"></label>' +
         '<label class="date-field">До <input type="date" class="edit-end" value="' + esc(t.endDate || '') + '"></label>' +
@@ -400,12 +417,18 @@
           render(tasksData, pendingData, document.getElementById('nameHeader').textContent);
         });
       });
+      scope.querySelectorAll('.edit-type').forEach(function (sel) {
+        sel.addEventListener('change', function () {
+          updateShopVisibility(this, this.closest('.edit-row').querySelector('.edit-shop'));
+        });
+      });
       scope.querySelectorAll('.pending-edit-save').forEach(function (btn) {
         btn.addEventListener('click', async function () {
           const li = btn.closest('li');
           const textInput = li.querySelector('.edit-text');
           const projectSelect = li.querySelector('.edit-project');
           const typeSelect = li.querySelector('.edit-type');
+          const shopSelect = li.querySelector('.edit-shop');
           const citySelect = li.querySelector('.edit-city');
           const startInput = li.querySelector('.edit-start');
           const endInput = li.querySelector('.edit-end');
@@ -414,6 +437,7 @@
           const text = textInput.value.trim();
           const project = projectSelect.value;
           const taskType = typeSelect.value;
+          const shop = taskType === 'Покупка' ? shopSelect.value : '';
           const city = citySelect.value;
           const startDate = startInput.value;
           const endDate = endInput.value;
@@ -424,18 +448,20 @@
           textInput.disabled = true;
           projectSelect.disabled = true;
           typeSelect.disabled = true;
+          shopSelect.disabled = true;
           citySelect.disabled = true;
           startInput.disabled = true;
           endInput.disabled = true;
           importantCb.disabled = true;
           personalCalendarCb.disabled = true;
-          await editPendingTask(btn.getAttribute('data-id'), text, project, importantCb.checked, personalCalendarCb.checked, startDate, endDate, taskType, city);
+          await editPendingTask(btn.getAttribute('data-id'), text, project, importantCb.checked, personalCalendarCb.checked, startDate, endDate, taskType, city, shop);
           if (document.body.contains(btn)) {
             btn.disabled = false;
             btn.textContent = 'Запази';
             textInput.disabled = false;
             projectSelect.disabled = false;
             typeSelect.disabled = false;
+            shopSelect.disabled = false;
             citySelect.disabled = false;
             startInput.disabled = false;
             endInput.disabled = false;
@@ -1022,13 +1048,14 @@
       const personalCalendar = document.getElementById('newTaskPersonalCalendar').checked;
       const project = document.getElementById('newTaskProject').value;
       const taskType = document.getElementById('newTaskType').value;
+      const shop = taskType === 'Покупка' ? document.getElementById('newTaskShop').value : '';
       const city = document.getElementById('newTaskCity').value;
       const startDate = document.getElementById('newTaskStart').value;
       const endDate = document.getElementById('newTaskEnd').value;
       if (!startDate && !endDate) { alert('Избери поне начална или крайна дата.'); return; }
       if (!city) { alert('Избери град.'); return; }
       try {
-        const data = await apiPost('personAddTask', { text: text, important: important, personalCalendar: personalCalendar, project: project, taskType: taskType, city: city, startDate: startDate, endDate: endDate });
+        const data = await apiPost('personAddTask', { text: text, important: important, personalCalendar: personalCalendar, project: project, taskType: taskType, shop: shop, city: city, startDate: startDate, endDate: endDate });
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         const created = (data.pendingTasks || []).find(function (t) { return t.text === text; });
         if (created) markTaskOpened(created);
@@ -1039,6 +1066,8 @@
         document.getElementById('newTaskPersonalCalendar').checked = false;
         document.getElementById('newTaskProject').value = '';
         document.getElementById('newTaskType').value = '';
+        document.getElementById('newTaskShop').value = '';
+        document.getElementById('newTaskShop').style.display = 'none';
         document.getElementById('newTaskCity').value = '';
         document.getElementById('newTaskStart').value = '';
         document.getElementById('newTaskEnd').value = '';
@@ -1047,9 +1076,9 @@
       }
     }
 
-    async function editPendingTask(id, text, project, important, personalCalendar, startDate, endDate, taskType, city) {
+    async function editPendingTask(id, text, project, important, personalCalendar, startDate, endDate, taskType, city, shop) {
       try {
-        const data = await apiPost('personEditTask', { id: id, text: text, project: project, important: important, personalCalendar: personalCalendar, startDate: startDate, endDate: endDate, taskType: taskType, city: city });
+        const data = await apiPost('personEditTask', { id: id, text: text, project: project, important: important, personalCalendar: personalCalendar, startDate: startDate, endDate: endDate, taskType: taskType, city: city, shop: shop });
         if (data.ok === false) { alert('Грешка: ' + data.error); return; }
         editingPendingId = null;
         applyData(data);
@@ -1157,7 +1186,11 @@
 
     document.getElementById('newTaskProject').innerHTML = projectOptions();
     document.getElementById('newTaskType').innerHTML = taskTypeOptions();
+    document.getElementById('newTaskShop').innerHTML = shopOptions();
     document.getElementById('newTaskCity').innerHTML = cityOptions();
+    document.getElementById('newTaskType').addEventListener('change', function () {
+      updateShopVisibility(this, document.getElementById('newTaskShop'));
+    });
     document.getElementById('newTaskText').addEventListener('input', function () { autoGrowTextarea(this); });
     // на всяко зареждане на страницата филтърът тръгва от "Активност",
     // без значение какво е било избрано преди — не се пази в localStorage
@@ -1173,6 +1206,7 @@
       const personalCalendarCb = document.getElementById('newTaskPersonalCalendar');
       const projectSelect = document.getElementById('newTaskProject');
       const typeSelect = document.getElementById('newTaskType');
+      const shopSelect = document.getElementById('newTaskShop');
       const citySelect = document.getElementById('newTaskCity');
       const startInput = document.getElementById('newTaskStart');
       const endInput = document.getElementById('newTaskEnd');
@@ -1183,6 +1217,7 @@
       personalCalendarCb.disabled = true;
       projectSelect.disabled = true;
       typeSelect.disabled = true;
+      shopSelect.disabled = true;
       citySelect.disabled = true;
       startInput.disabled = true;
       endInput.disabled = true;
@@ -1196,6 +1231,7 @@
       endInput.disabled = false;
       projectSelect.disabled = false;
       typeSelect.disabled = false;
+      shopSelect.disabled = false;
       citySelect.disabled = false;
     });
     // Съобщение за новите функции — веднъж скрито (клик на "Скрий"), не се показва повече никога.
