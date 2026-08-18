@@ -129,6 +129,7 @@
 
     const TASK_TYPES = ['Сервиз', 'Монтаж', 'Заваряване', 'Профилактика', 'Оглед'];
     const TASK_TYPE_PREFIX = { 'Сервиз': 'Сервиз - ', 'Монтаж': 'Монтаж - ', 'Заваряване': 'Заваряване - ', 'Профилактика': 'Профилактика - ', 'Оглед': 'Оглед - ' };
+    const ALL_CITIES_OPTION = 'Всички градове';
     function displayTaskText(t) {
       return (TASK_TYPE_PREFIX[t.taskType] || '') + (t.city ? t.city + ': ' : '') + t.text;
     }
@@ -277,7 +278,8 @@
     function cityOptions(selected) {
       return '<option value="">— избери град —</option>' + CITIES.map(function (c) {
         return '<option value="' + esc(c) + '"' + (c === selected ? ' selected' : '') + '>' + esc(c) + '</option>';
-      }).join('');
+      }).join('') +
+        '<option value="' + esc(ALL_CITIES_OPTION) + '"' + (selected === ALL_CITIES_OPTION ? ' selected' : '') + '>--- Всички градове ---</option>';
     }
 
     const NO_TASK_TYPE_VALUE = '__notype__';
@@ -624,10 +626,16 @@
         if (t.city) { if (inUse.indexOf(t.city) === -1) inUse.push(t.city); }
         else hasNone = true;
       });
-      inUse.sort(function (a, b) { return CITIES.indexOf(a) - CITIES.indexOf(b); });
+      inUse.sort(function (a, b) {
+        const ai = a === ALL_CITIES_OPTION ? CITIES.length : CITIES.indexOf(a);
+        const bi = b === ALL_CITIES_OPTION ? CITIES.length : CITIES.indexOf(b);
+        return ai - bi;
+      });
       return '<option value="">Всички градове</option>' +
         (hasNone ? '<option value="' + NO_CITY_VALUE + '">без град</option>' : '') +
-        inUse.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
+        inUse.map(function (c) {
+          return '<option value="' + esc(c) + '">' + (c === ALL_CITIES_OPTION ? '--- Всички градове ---' : esc(c)) + '</option>';
+        }).join('');
     }
 
     // Таб "Изтегляне на задачи" — само собствените ОДОБРЕНИ задачи
