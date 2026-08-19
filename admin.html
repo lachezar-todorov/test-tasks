@@ -140,12 +140,14 @@
       'Сънотех'
     ];
 
-    const TASK_TYPES = ['Сервиз', 'Монтаж', 'Заваряване', 'Профилактика', 'Оглед', 'Транспорт', 'Покупка'];
-    const TASK_TYPE_PREFIX = { 'Сервиз': 'Сервиз - ', 'Монтаж': 'Монтаж - ', 'Заваряване': 'Заваряване - ', 'Профилактика': 'Профилактика - ', 'Оглед': 'Оглед - ', 'Транспорт': 'Транспорт - ', 'Покупка': 'Покупка - ' };
-    const SHOPS = ['Пасадор', 'Интеза', 'Мезенбург', 'Иигъл Трейд', 'Одекс', 'Метал М', 'Миланов и син', 'Илпени'];
+    const TASK_TYPES = ['Сервиз', 'Монтаж', 'Заваряване', 'Профилактика', 'Оглед', 'Транспорт', 'Покупка', 'Рекламация', 'Оферта'];
+    const TASK_TYPE_PREFIX = { 'Сервиз': 'Сервиз - ', 'Монтаж': 'Монтаж - ', 'Заваряване': 'Заваряване - ', 'Профилактика': 'Профилактика - ', 'Оглед': 'Оглед - ', 'Транспорт': 'Транспорт - ', 'Покупка': 'Покупка - ', 'Рекламация': 'Рекламация - ', 'Оферта': 'Оферта - ' };
+    const SHOPS = ['Пасадор', 'Интеза', 'Мезенбург', 'Иигъл Трейд', 'Одекс', 'Метал М', 'Миланов и син', 'Илпени', 'Текентруп', 'Промщал', 'Аса Аблой', 'Янсен', 'ITW', 'Прюм'];
+    // Категориите, при които важи полето "Магазин".
+    const SHOP_TASK_TYPES = ['Покупка', 'Рекламация'];
     const ALL_CITIES_OPTION = 'Всички градове';
     function displayTaskText(t) {
-      const shopPart = (t.taskType === 'Покупка' && t.shop) ? t.shop + ': ' : '';
+      const shopPart = (SHOP_TASK_TYPES.indexOf(t.taskType) !== -1 && t.shop) ? t.shop + ': ' : '';
       return (TASK_TYPE_PREFIX[t.taskType] || '') + (t.city ? t.city + ': ' : '') + shopPart + t.text;
     }
 
@@ -297,7 +299,7 @@
     // Полето "Магазин" се показва само когато вид задача е "Покупка" —
     // общ помощник, ползван и от формата за нова задача, и от редакция.
     function updateShopVisibility(typeSelect, shopSelect) {
-      const show = typeSelect.value === 'Покупка';
+      const show = SHOP_TASK_TYPES.indexOf(typeSelect.value) !== -1;
       shopSelect.style.display = show ? '' : 'none';
       if (!show) shopSelect.value = '';
     }
@@ -419,7 +421,7 @@
         '<select class="edit-assignee">' + peopleOptions(t.assignee) + '</select>' +
         '<select class="edit-project">' + projectOptions(t.project) + '</select>' +
         '<select class="edit-type">' + taskTypeOptions(t.taskType) + '</select>' +
-        '<select class="edit-shop" style="display:' + (t.taskType === 'Покупка' ? '' : 'none') + '">' + shopOptions(t.shop) + '</select>' +
+        '<select class="edit-shop" style="display:' + (SHOP_TASK_TYPES.indexOf(t.taskType) !== -1 ? '' : 'none') + '">' + shopOptions(t.shop) + '</select>' +
         '<select class="edit-city">' + cityOptions(t.city) + '</select>' +
         '<label class="date-field">От <input type="date" class="edit-start" value="' + esc(t.startDate || '') + '"></label>' +
         '<label class="date-field">До <input type="date" class="edit-end" value="' + esc(t.endDate || '') + '"></label>' +
@@ -995,7 +997,7 @@
           const assignee = assigneeSelect.value;
           const project = projectSelect.value;
           const taskType = typeSelect.value;
-          const shop = taskType === 'Покупка' ? shopSelect.value : '';
+          const shop = SHOP_TASK_TYPES.indexOf(taskType) !== -1 ? shopSelect.value : '';
           const city = citySelect.value;
           const startDate = startInput.value;
           const endDate = endInput.value;
@@ -1176,7 +1178,7 @@
       const who = document.getElementById('newTaskWho').value;
       const project = document.getElementById('newTaskProject').value;
       const taskType = document.getElementById('newTaskType').value;
-      const shop = taskType === 'Покупка' ? document.getElementById('newTaskShop').value : '';
+      const shop = SHOP_TASK_TYPES.indexOf(taskType) !== -1 ? document.getElementById('newTaskShop').value : '';
       const city = document.getElementById('newTaskCity').value;
       const startDate = document.getElementById('newTaskStart').value;
       const endDate = document.getElementById('newTaskEnd').value;
