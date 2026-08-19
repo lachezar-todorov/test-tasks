@@ -15,6 +15,7 @@ body{
   background:var(--paper);
   color:var(--ink);
   -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
 }
 
 /* --- лого (responsive — height, а не фиксиран px, за да следва vw) --- */
@@ -171,8 +172,13 @@ ul.tasks li:hover{background:#fafaf6;}
 .personal-cal-hide-btn{font-size:12px;padding:4px 8px;}
 
 /* --- проекти --- */
-.tabs{display:flex;gap:4px;padding:0 2px;margin-bottom:16px;border-bottom:1px solid var(--line);}
-.tab-btn{background:transparent;color:var(--muted);padding:10px 18px;border-radius:8px 8px 0 0;font-weight:600;font-size:13.5px;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;}
+/* overflow-x:auto + nowrap вместо wrap — на тесен екран (мобилен телефон)
+   табовете не се събират на ширината на картата (особено "Изтегляне на
+   задачи", най-дългият надпис), затова лентата се превръща в собствен
+   хоризонтално-скролируем контейнер вместо да "изтича" извън таблото. */
+.tabs{display:flex;gap:4px;padding:0 2px;margin-bottom:16px;border-bottom:1px solid var(--line);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.tabs::-webkit-scrollbar{display:none;}
+.tab-btn{background:transparent;color:var(--muted);padding:10px 18px;border-radius:8px 8px 0 0;font-weight:600;font-size:13.5px;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;flex:0 0 auto;}
 .tab-btn.active{color:var(--teal-dark);border-bottom-color:var(--teal);background:#fff;}
 .tab-btn:hover:not(.active){background:#f7f5ee;color:var(--ink);}
 .project-picker{display:flex;gap:8px;padding:16px 18px;flex-wrap:wrap;}
