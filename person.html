@@ -998,13 +998,26 @@
     // грешка — това чупи res.json(). При такъв провал (или чиста мрежова
     // грешка) опитваме автоматично още 2 пъти, с кратко изчакване между
     // опитите, преди да предадем грешката нагоре към извикващия.
+    // Тези две грешки идват само от default-клоновете на doGet/doPost в
+    // Code.gs, когато action не е разпознат — фронтендът никога съзнателно
+    // не праща непознат action, така че ако все пак ги видим, това почти
+    // сигурно е преходен проблем от Apps Script (напр. точно след ново
+    // публикуване на деплой, докато се прехвърли към новата версия), а не
+    // истинска грешка — затова се третират като още една причина за retry.
+    const TRANSIENT_SERVER_ERRORS = ['Непозната заявка.', 'Непозната команда.'];
+
     async function fetchJsonWithRetry(url, options, attempts) {
       attempts = attempts || 3;
       let lastErr;
       for (let i = 0; i < attempts; i++) {
         try {
           const res = await fetch(url, options);
-          return await res.json();
+          const data = await res.json();
+          if (data && data.ok === false && TRANSIENT_SERVER_ERRORS.indexOf(data.error) !== -1 && i < attempts - 1) {
+            await new Promise(function (resolve) { setTimeout(resolve, 1500 * (i + 1)); });
+            continue;
+          }
+          return data;
         } catch (err) {
           lastErr = err;
           if (i < attempts - 1) {
