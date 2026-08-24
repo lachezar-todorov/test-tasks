@@ -233,6 +233,14 @@
       el.style.height = el.scrollHeight + 'px';
     }
 
+    // Не позволява да се избере "отрицателен" период — крайна дата преди
+    // началната. Ограничава директно самите падащи календарчета (min/max),
+    // вместо само да гърми с грешка след избор.
+    function syncDateRangeInputs(startEl, endEl) {
+      if (startEl.value) endEl.min = startEl.value; else endEl.removeAttribute('min');
+      if (endEl.value) startEl.max = endEl.value; else startEl.removeAttribute('max');
+    }
+
     // Apps Script понякога не отговаря навреме (бавен round-trip, timeout,
     // или табът е бил минимизиран докато е чакал) и вместо JSON връща HTML
     // грешка — това чупи res.json(). При такъв провал (или чиста мрежова
@@ -438,8 +446,8 @@
         '<select class="edit-type">' + taskTypeOptions(t.taskType) + '</select>' +
         '<select class="edit-shop" style="display:' + (SHOP_TASK_TYPES.indexOf(t.taskType) !== -1 ? '' : 'none') + '">' + shopOptions(t.shop) + '</select>' +
         '<select class="edit-city">' + cityOptions(t.city) + '</select>' +
-        '<label class="date-field">От <input type="date" class="edit-start" value="' + esc(t.startDate || '') + '"></label>' +
-        '<label class="date-field">До <input type="date" class="edit-end" value="' + esc(t.endDate || '') + '"></label>' +
+        '<label class="date-field">От <input type="date" class="edit-start" value="' + esc(t.startDate || '') + '"' + (t.endDate ? ' max="' + esc(t.endDate) + '"' : '') + '></label>' +
+        '<label class="date-field">До <input type="date" class="edit-end" value="' + esc(t.endDate || '') + '"' + (t.startDate ? ' min="' + esc(t.startDate) + '"' : '') + '></label>' +
         '<label class="important-check"><input type="checkbox" class="edit-important"' + (t.important ? ' checked' : '') + '> Важна</label>' +
         '<label class="important-check"><input type="checkbox" class="edit-in-calendar"' + (t.inCalendar ? ' checked' : '') + '> Календар</label>' +
         '<label class="important-check"><input type="checkbox" class="edit-personal-calendar"' + (t.inPersonalCalendar ? ' checked' : '') + '> Личен календар</label>' +
@@ -994,6 +1002,12 @@
           updateShopVisibility(this, this.closest('.edit-row').querySelector('.edit-shop'));
         });
       });
+      document.querySelectorAll('.edit-start, .edit-end').forEach(function (input) {
+        input.addEventListener('change', function () {
+          const row = this.closest('.edit-row');
+          syncDateRangeInputs(row.querySelector('.edit-start'), row.querySelector('.edit-end'));
+        });
+      });
       document.querySelectorAll('.edit-save').forEach(function (btn) {
         btn.addEventListener('click', async function () {
           const li = btn.closest('li');
@@ -1017,6 +1031,7 @@
           const startDate = startInput.value;
           const endDate = endInput.value;
           if (!text) return;
+          if (startDate && endDate && endDate < startDate) { alert('Крайната дата не може да е преди началната.'); return; }
           btn.disabled = true;
           btn.textContent = 'Запазва се...';
           textInput.disabled = true;
@@ -1202,6 +1217,7 @@
       const personalCalendar = document.getElementById('newTaskPersonalCalendar').checked;
       if (!text) return;
       if (!startDate && !endDate) { alert('Избери поне начална или крайна дата.'); return; }
+      if (startDate && endDate && endDate < startDate) { alert('Крайната дата не може да е преди началната.'); return; }
       if (!city) { alert('Избери град.'); return; }
       try {
         const res = await apiPost('addTask', { text: text, assignee: who, important: important, project: project, taskType: taskType, shop: shop, city: city, startDate: startDate, endDate: endDate, inCalendar: inCalendar, personalCalendar: personalCalendar });
@@ -1221,6 +1237,8 @@
         document.getElementById('newTaskCity').value = '';
         document.getElementById('newTaskStart').value = '';
         document.getElementById('newTaskEnd').value = '';
+        document.getElementById('newTaskStart').removeAttribute('max');
+        document.getElementById('newTaskEnd').removeAttribute('min');
       } catch (err) { onError(err); }
     }
 
@@ -1387,6 +1405,12 @@
       updateShopVisibility(this, document.getElementById('newTaskShop'));
     });
     document.getElementById('newTaskText').addEventListener('input', function () { autoGrowTextarea(this); });
+    document.getElementById('newTaskStart').addEventListener('change', function () {
+      syncDateRangeInputs(document.getElementById('newTaskStart'), document.getElementById('newTaskEnd'));
+    });
+    document.getElementById('newTaskEnd').addEventListener('change', function () {
+      syncDateRangeInputs(document.getElementById('newTaskStart'), document.getElementById('newTaskEnd'));
+    });
     document.getElementById('addBtn').addEventListener('click', async function () {
       const btn = document.getElementById('addBtn');
       const input = document.getElementById('newTaskText');
