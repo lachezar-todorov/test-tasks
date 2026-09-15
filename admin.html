@@ -65,7 +65,7 @@
         <div class="addrow" style="padding-top:0;">
           <button class="btn-primary" id="projectExportBtn" disabled>Изтегляне</button>
         </div>
-        <div id="projectTaskList"><div class="empty">Избери проект отгоре, за да видиш задачите му.</div></div>
+        <div id="projectTaskList"><div class="empty">Зарежда се...</div></div>
       </div>
     </div>
     <div id="calendarView" style="display:none;">
@@ -611,11 +611,11 @@
     function renderProjectsView() {
       const listEl = document.getElementById('projectTaskList');
       const exportBtn = document.getElementById('projectExportBtn');
-      if (!selectedProject && !selectedTaskTypeFilter && !selectedCityFilter) {
-        listEl.innerHTML = '<div class="empty">Избери проект, вид задача и/или град отгоре, за да видиш задачите.</div>';
-        exportBtn.disabled = true;
-        return;
-      }
+      // selectedProject === '' означава изрично избрано "Всички проекти"
+      // (виж стойността "" на първата опция в падащото меню по-долу) — по
+      // подразбиране и трите филтъра стоят на "Всички", затова показваме/
+      // позволяваме изтегляне на ВСИЧКИ (одобрени) задачи направо, вместо
+      // да караме админа първо да стесни избора с поне един филтър.
       // "Изтегляне на задачи" е за одобрени задачи — чакащите одобрение
       // не се показват тук (и съответно не се и изтеглят); одобряването
       // им си остава през таб "Табло".
@@ -1474,7 +1474,7 @@
         });
       });
     });
-    document.getElementById('projectSelect').innerHTML = '<option value="">— избери проект —</option>' +
+    document.getElementById('projectSelect').innerHTML = '<option value="">Всички проекти</option>' +
       '<option value="' + NO_PROJECT_VALUE + '">— без проект —</option>' +
       PROJECTS.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
     document.getElementById('projectSelect').addEventListener('change', function () {
