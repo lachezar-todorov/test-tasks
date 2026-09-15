@@ -89,7 +89,7 @@
         <div class="addrow" style="padding-top:0;">
           <button class="btn-primary" id="exportTaskListBtn" disabled>Изтегляне</button>
         </div>
-        <div id="exportTaskList"><div class="empty">Избери проект, вид задача и/или град отгоре, за да видиш задачите си.</div></div>
+        <div id="exportTaskList"><div class="empty">Зареждане...</div></div>
       </div>
     </div>
   </div>
@@ -713,11 +713,11 @@
       typeSelect.value = exportTaskType;
       citySelect.value = exportCity;
 
-      if (!exportProject && !exportTaskType && !exportCity) {
-        listEl.innerHTML = '<div class="empty">Избери проект, вид задача и/или град отгоре, за да видиш задачите си.</div>';
-        btn.disabled = true;
-        return;
-      }
+      // exportProject === '' означава изрично избрано "Всички проекти"
+      // (виж exportProjectFilterOptions по-горе) — по подразбиране и
+      // трите филтъра стоят на "Всички", затова показваме/позволяваме
+      // изтегляне на ВСИЧКИ (собствени одобрени) задачи направо, вместо
+      // да караме потребителя първо да стесни избора с поне един филтър.
       let rows = tasksData;
       if (exportProject === NO_PROJECT_VALUE) rows = rows.filter(function (t) { return !t.project; });
       else if (exportProject) rows = rows.filter(function (t) { return t.project === exportProject; });
